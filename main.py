@@ -55,32 +55,27 @@ def get_args():
         'noattack',
         'clean',
     ])
-    parser.add_argument("--verbose", type=bool, default=True)
-
+    parser.add_argument("--verbose", action="store_true")
     parser.add_argument('--output_dir', type=str, default='./')
-
     parser.add_argument('--model_dir', type=str, default="/home/v-kaijiezhu/")
-
     parser.add_argument('--shot', type=int, default=0)
-
     parser.add_argument('--generate_len', type=int, default=4)
-
     parser.add_argument('--prompt_selection', action='store_true')
+    parser.add_argument('--max_samples', type=int, default=1000, help="max number of samples to use from the dataset")
 
     args = parser.parse_args()
     return args
 
 
-def prompt_selection(logger, inference_model, prompts):
-    """Select the top 3 prompts to attack
+def prompt_selection(logger, inference_model, prompts, max_samples=1000):
+    """Select the top 3 prompts to attack based on the accuracy
     """
     prompt_dict = {}
 
     for prompt in prompts:
-        acc = inference_model.predict(prompt)
+        acc = inference_model.predict(prompt, max_samples=max_samples)
         prompt_dict[prompt] = acc
         logger.info("{:.2f}, {}\n".format(acc*100, prompt))
-
     sorted_prompts = sorted(prompt_dict.items(),
                             key=lambda x: x[1], reverse=True)
     return sorted_prompts
@@ -132,9 +127,9 @@ def attack(args, inference_model, RESULTS_DIR):
         ]
 
         for prompts in run_list:
-
+            # select attack prompts that give the highest accuracy
             sorted_prompts = prompt_selection(
-                args.logger, inference_model, prompts)
+                args.logger, inference_model, prompts, args.max_samples)
             if args.prompt_selection:
                 for prompt, acc in sorted_prompts:
                     args.logger.info(
@@ -147,8 +142,7 @@ def attack(args, inference_model, RESULTS_DIR):
 
             for init_prompt, init_acc in sorted_prompts[:3]:
                 if init_acc > 0:
-                    init_acc, attacked_prompt, attacked_acc, dropped_acc = attack.attack(
-                        init_prompt)
+                    init_acc, attacked_prompt, attacked_acc, dropped_acc = attack.attack(init_prompt)
                     args.logger.info("Original prompt: {}".format(init_prompt))
                     args.logger.info("Attacked prompt: {}".format(
                         attacked_prompt.encode('utf-8')))

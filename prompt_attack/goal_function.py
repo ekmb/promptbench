@@ -239,12 +239,13 @@ class AdvPromptGoalFunction(GoalFunction):
     """A goal function defined on a model that outputs a probability for some
     number of classes."""
 
-    def __init__(self, inference, query_budget, verbose=True, logger=None, *args, target_max_acc=0, **kwargs):
+    def __init__(self, inference, query_budget, verbose=True, logger=None, max_samples=1000, *args, target_max_acc=0, **kwargs):
         self.inference = inference
         self.query_budget = query_budget
         self.target_max_acc = target_max_acc
         self.logger = logger
         self.verbose = verbose
+        self.max_samples = max_samples
         super().__init__(*args, **kwargs)
 
     def _process_model_outputs(self, inputs, outputs):
@@ -280,7 +281,7 @@ class AdvPromptGoalFunction(GoalFunction):
             prompt = attacked_prompt.text
             if self.verbose:
                 self.logger.info("Current adv prompt is: {}".format(prompt))
-            acc = self.inference.predict(prompt)
+            acc = self.inference.predict(prompt, max_samples=self.max_samples)
             if self.verbose:
                 self.logger.info("Current acc: {:.2f}".format(acc*100))
             acc_list.append(acc)
@@ -292,7 +293,8 @@ class AdvPromptGoalFunction(GoalFunction):
 
 def create_goal_function(args, inference_model):
     goal_function = AdvPromptGoalFunction(inference=inference_model, query_budget=args.query_budget, 
-                                          logger=args.logger, model_wrapper=None, verbose=args.verbose)
+                                          logger=args.logger, model_wrapper=None, verbose=args.verbose,
+                                          max_samples=args.max_samples)
     return goal_function
 
 
@@ -301,12 +303,13 @@ class PromptGoalFunction(GoalFunction):
     """A goal function defined on a model that outputs a probability for some
     number of classes."""
 
-    def __init__(self, inference, query_budget, verbose=True, logger=None, *args, target_max_acc=0, **kwargs):
+    def __init__(self, inference, query_budget, verbose=True, logger=None, max_samples=1000, *args, target_max_acc=0, **kwargs):
         self.inference = inference
         self.query_budget = query_budget
         self.target_max_acc = target_max_acc
         self.logger = logger
         self.verbose = verbose
+        self.max_samples = max_samples
         super().__init__(*args, **kwargs)
 
     def _process_model_outputs(self, inputs, outputs):
@@ -341,7 +344,7 @@ class PromptGoalFunction(GoalFunction):
             prompt = prompt.text
             if self.verbose:
                 self.logger.info("Current prompt is: {}".format(prompt))
-            acc = self.inference.predict(prompt)
+            acc = self.inference.predict(prompt, max_samples=self.max_samples)
             if self.verbose:
                 self.logger.info("Current acc: {:.2f}".format(acc*100))
             acc_list.append(acc)
@@ -356,5 +359,6 @@ def create_goal_function(args, inference_model):
                                        query_budget=args.query_budget,
                                        logger=args.logger, 
                                        model_wrapper=None, 
-                                       verbose=args.verbose)
+                                       verbose=args.verbose,
+                                       max_samples=args.max_samples)
     return goal_function

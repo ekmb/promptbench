@@ -216,13 +216,13 @@ class Inference(object):
             raise NotImplementedError(
                 "Eval this dataset {self.args.dataset} is not implemented!")
 
-    def predict(self, prompt=None):
+    def predict(self, prompt=None, max_samples=1000):
         assert self.args.data is not None, "Please load data first!"
 
         if self.model in ["chatgpt", "gpt4"]:
             results = self.predict_by_openai_api(self.model, prompt)
         else:
-            results = self.predict_by_local_inference(self.model, prompt)
+            results = self.predict_by_local_inference(self.model, prompt, max_samples)
         return results
 
     def predict_by_openai_api(self, model, prompt):
@@ -258,10 +258,11 @@ class Inference(object):
         return score
 
 
-    def predict_by_local_inference(self, model, prompt):
+    def predict_by_local_inference(self, model, prompt, max_samples=1000):
         data_len = len(self.args.data)
-        if data_len > 1000:
-            data_len = 1000
+
+        if data_len > max_samples:
+            data_len = max_samples
 
         score = 0
         check_correctness = 100
@@ -269,7 +270,6 @@ class Inference(object):
         gts = []
 
         for idx in tqdm(range(data_len)):
-
             raw_data = self.args.data.get_content_by_idx(
                 idx, self.args.dataset)
             input_text, gt = self.process_input(prompt, raw_data)

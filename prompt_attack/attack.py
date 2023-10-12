@@ -95,7 +95,7 @@ class AdvPromptAttack:
         >>> search_method = GreedyWordSwapWIR(wir_method="delete")
 
         >>> # Construct the actual attack
-        >>> attack = Attack(goal_function, constraints, transformation, search_method)
+        >>> attack = AdvPromptAttack(goal_function, constraints, transformation, search_method)
 
         >>> input_text = "I really enjoyed the new movie that came out last month."
         >>> label = 1 #Positive
@@ -446,11 +446,6 @@ class AdvPromptAttack:
                 Example to attack. It can be a single string or an `OrderedDict` where
                 keys represent the input fields (e.g. "premise", "hypothesis") and the values are the actual input textx.
                 Also accepts :class:`~textattack.shared.AttackedText` that wraps around the input.
-            ground_truth_output(:obj:`int`, :obj:`float` or :obj:`str`):
-                Ground truth output of `example`.
-                For classification tasks, it should be an integer representing the ground truth label.
-                For regression tasks (e.g. STS), it should be the target value.
-                For seq2seq tasks (e.g. translation), it should be the target string.
         Returns:
             :class:`~textattack.attack_results.AttackResult` that represents the result of the attack.
         """
@@ -460,11 +455,6 @@ class AdvPromptAttack:
         if isinstance(example, (str, OrderedDict)):
             example = AttackedText(example)
 
-        # assert isinstance(
-        #     ground_truth_output, (int, str)
-        # ), "`ground_truth_output` must either be `str` or `int`."
-        
-        # Allow ground_truth_output to be float (acc). 
         goal_function_result, _ = self.goal_function.init_attack_example(example)
         if goal_function_result.goal_status == GoalFunctionResultStatus.SKIPPED:
             return SkippedAttackResult(goal_function_result)
