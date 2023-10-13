@@ -62,7 +62,8 @@ MODEL_SET = [
     'cerebras/Cerebras-GPT-13B',
     'databricks/dolly-v1-6b',
     'chatgpt',
-    'gpt4'
+    'gpt4',
+    'nemo',
 ]
 
 LABEL_TO_ID = {
@@ -99,6 +100,7 @@ SUPPORTED_LANGUAGES = {
     'vicuna-13b': ['en', 'de', 'fr'],
     'llama2-13b-chat': ['en', 'de', 'fr'],
     'chatgpt': ['en', 'de', 'fr'],
+    'nemo': ['en']
 }
 
 LANGUAGES = {

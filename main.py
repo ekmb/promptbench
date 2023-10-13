@@ -33,8 +33,8 @@ def create_logger(log_path):
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str,
-                        default='google/flan-t5-large', choices=MODEL_SET)
+    parser.add_argument('--model', type=str, default='google/flan-t5-large', choices=MODEL_SET,
+                        help="model name. For LLAMA also specify `--model_dir`, and NeMo models: `--nemo_model_path` and `--nemo_infer_cfg`.")
     parser.add_argument('--dataset', type=str, default='bool_logic', choices=["sst2", "cola", "qqp",
                                                                               "mnli", "mnli_matched", "mnli_mismatched",
                                                                               "qnli", "wnli", "rte", "mrpc",
@@ -57,11 +57,13 @@ def get_args():
     ])
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument('--output_dir', type=str, default='./')
-    parser.add_argument('--model_dir', type=str, default="/home/v-kaijiezhu/")
+    parser.add_argument('--model_dir', type=str, default=None, help="path to the model directory for LLAMA and NeMo models")
     parser.add_argument('--shot', type=int, default=0)
     parser.add_argument('--generate_len', type=int, default=4)
     parser.add_argument('--prompt_selection', action='store_true')
     parser.add_argument('--max_samples', type=int, default=1000, help="max number of samples to use from the dataset")
+    parser.add_argument('--nemo_infer_cfg', type=str, default=None, help='path to NeMo inference config yaml')
+    parser.add_argument('--nemo_model_path', type=str, default=None, help='path to .nemo model file')
 
     args = parser.parse_args()
     return args
@@ -178,8 +180,8 @@ def main(args):
         if not os.path.isdir(DIR):
             os.makedirs(DIR)
 
-    file_name = args.model.replace('/', '_') + '_' + args.attack + "_gen_len_" + str(
-        args.generate_len) + "_" + str(args.shot) + "_shot"
+    # TODO update this for NeMo models
+    file_name = args.model.replace('/', '_') + '_' + args.attack + "_gen_len_" + str(args.generate_len) + "_" + str(args.shot) + "_shot"
 
     args.save_file_name = file_name
 

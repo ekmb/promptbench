@@ -150,7 +150,7 @@ class GoalFunction(ReprMixin, ABC):
         objects."""
         if not len(attacked_text_list):
             return []
-
+        import pdb; pdb.set_trace()
         inputs = [at.tokenizer_input for at in attacked_text_list]
         outputs = []
         i = 0

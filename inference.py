@@ -108,6 +108,9 @@ class Inference(object):
                 self.pipe = AutoModelForCausalLM.from_pretrained(
                     "databricks/dolly-v1-6b", device_map="auto", torch_dtype=torch.float16)
 
+            elif self.model == "nemo":
+                pass
+
             else:
                 raise NotImplementedError("The model is not implemented!")
 
