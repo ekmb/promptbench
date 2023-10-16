@@ -454,7 +454,7 @@ class AdvPromptAttack:
         ), "`example` must either be `str`, `collections.OrderedDict`, `textattack.shared.AttackedText`."
         if isinstance(example, (str, OrderedDict)):
             example = AttackedText(example)
-
+        
         goal_function_result, _ = self.goal_function.init_attack_example(example)
         if goal_function_result.goal_status == GoalFunctionResultStatus.SKIPPED:
             return SkippedAttackResult(goal_function_result)

@@ -123,6 +123,7 @@ def attack(args, inference_model, RESULTS_DIR):
         goal_function = create_goal_function(args, inference_model)
         attack = create_attack(args, goal_function)
 
+        # each dataset has different predifiend prompts, the number of prompts can vary
         run_list = [
             TASK_ORIENTED_PROMPT_SET[args.dataset],
             ROLE_ORIENTED_PROMPT_SET[args.dataset],
@@ -144,12 +145,13 @@ def attack(args, inference_model, RESULTS_DIR):
 
             for init_prompt, init_acc in sorted_prompts[:3]:
                 if init_acc > 0:
+                    print("Init prompt: {}".format(init_prompt))
+                    import pdb; pdb.set_trace()
                     init_acc, attacked_prompt, attacked_acc, dropped_acc = attack.attack(init_prompt)
                     args.logger.info("Original prompt: {}".format(init_prompt))
-                    args.logger.info("Attacked prompt: {}".format(
-                        attacked_prompt.encode('utf-8')))
-                    args.logger.info("Original acc: {:.2f}%, attacked acc: {:.2f}%, dropped acc: {:.2f}%".format(
-                        init_acc*100, attacked_acc*100, dropped_acc*100))
+                    args.logger.info("Attacked prompt: {}".format(attacked_prompt.encode('utf-8')))
+                    args.logger.info("Original acc: {:.2f}%, attacked acc: {:.2f}%, dropped acc: {:.2f}%".format(init_acc*100, attacked_acc*100, dropped_acc*100))
+                    import pdb; pdb.set_trace()
                     with open(RESULTS_DIR+args.save_file_name+".txt", "a+") as f:
                         f.write("Original prompt: {}\n".format(init_prompt))
                         f.write("Attacked prompt: {}\n".format(
@@ -180,9 +182,14 @@ def main(args):
         if not os.path.isdir(DIR):
             os.makedirs(DIR)
 
-    # TODO update this for NeMo models
-    file_name = args.model.replace('/', '_') + '_' + args.attack + "_gen_len_" + str(args.generate_len) + "_" + str(args.shot) + "_shot"
+    model_name = args.model.replace('/', '_')
+    if args.model == "nemo":
+        if args.nemo_model_path is None or not os.path.exists(args.nemo_model_path):
+            raise ValueError("Please specify a valid .nemo path")
+        model_name = os.path.basename(args.nemo_model_path).replace(".nemo", "")
 
+    file_name = model_name + '_' + args.attack + "_gen_len_" + str(args.generate_len) + "_" + str(args.shot) + "_shot"
+    
     args.save_file_name = file_name
 
     if args.dataset in ["iwslt", "un_multi"]:

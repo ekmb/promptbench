@@ -87,7 +87,11 @@ class GoalFunction(ReprMixin, ABC):
             queries_left = self.query_budget - self.num_queries
             attacked_text_list = attacked_text_list[:queries_left]
         self.num_queries += len(attacked_text_list)
+        
         model_outputs = self._call_model(attacked_text_list)
+        print(f"attacked_text_list: {len(attacked_text_list)}")
+        [print(x) for x in attacked_text_list]
+        import pdb; pdb.set_trace()
         for attacked_text, raw_output in zip(attacked_text_list, model_outputs):
             displayed_output = self._get_displayed_output(raw_output)
             goal_status = self._get_goal_status(
@@ -150,7 +154,7 @@ class GoalFunction(ReprMixin, ABC):
         objects."""
         if not len(attacked_text_list):
             return []
-        import pdb; pdb.set_trace()
+        
         inputs = [at.tokenizer_input for at in attacked_text_list]
         outputs = []
         i = 0
@@ -292,8 +296,11 @@ class AdvPromptGoalFunction(GoalFunction):
 
 
 def create_goal_function(args, inference_model):
-    goal_function = AdvPromptGoalFunction(inference=inference_model, query_budget=args.query_budget, 
-                                          logger=args.logger, model_wrapper=None, verbose=args.verbose,
+    goal_function = AdvPromptGoalFunction(inference=inference_model,
+                                          query_budget=args.query_budget, 
+                                          logger=args.logger,
+                                          model_wrapper=None,
+                                          verbose=args.verbose,
                                           max_samples=args.max_samples)
     return goal_function
 

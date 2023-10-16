@@ -9,7 +9,12 @@ class LabelConstraint(PreTransformationConstraint):
     """
 
     def __init__(self, labels=[]):
-        self.labels = [label.lower() for label in labels]
+        self.labels = []
+        for label in labels:
+            if isinstance(label, str):
+                self.labels.append(label.lower())
+            else:
+                self.labels.append(label)
 
     def _get_modifiable_indices(self, current_text):
         modifiable_indices = set()

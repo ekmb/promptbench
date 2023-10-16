@@ -4,7 +4,7 @@
 import openai
 from config import LABEL_SET, LABEL_TO_ID
 from tqdm import tqdm
-
+from typing import List
 
 """
 This clss implements the inference of the model (including create the model).
@@ -250,7 +250,7 @@ class Inference(object):
             preds.append(pred)
             gts.append(gt)
 
-            if check_correctness > 0:
+            if check_correctness > 0 and self.args.verbose:
                 self.args.logger.info("gt: {}".format(gt))
                 self.args.logger.info("Pred: {}".format(pred))
                 self.args.logger.info("sentence: {}".format(input_text))
@@ -273,8 +273,7 @@ class Inference(object):
         gts = []
 
         for idx in tqdm(range(data_len)):
-            raw_data = self.args.data.get_content_by_idx(
-                idx, self.args.dataset)
+            raw_data = self.args.data.get_content_by_idx(idx, self.args.dataset)
             input_text, gt = self.process_input(prompt, raw_data)
 
             raw_pred = self.pred_by_generation(input_text, model)
@@ -283,7 +282,7 @@ class Inference(object):
             preds.append(pred)
             gts.append(gt)
 
-            if check_correctness > 0:
+            if check_correctness > 0 and self.args.verbose:
                 self.args.logger.info("gt: {}".format(gt))
                 self.args.logger.info("Pred: {}".format(pred))
                 self.args.logger.info("sentence: {}".format(input_text))
@@ -293,6 +292,37 @@ class Inference(object):
         score = self.eval(preds, gts)
         return score
 
+    def predict_by_local_inference_list(self, model, prompt, max_samples=1000):
+        data_len = len(self.args.data)
+
+        if data_len > max_samples:
+            data_len = max_samples
+
+        score = 0
+        check_correctness = 100
+        preds = []
+        gts = []
+
+        for idx in tqdm(range(data_len)):
+            raw_data = self.args.data.get_content_by_idx(idx, self.args.dataset)
+            input_text, gt = self.process_input(prompt, raw_data)
+
+            raw_pred = self.pred_by_generation(input_text, model)
+            pred = self.process_pred(raw_pred)
+
+            preds.append(pred)
+            gts.append(gt)
+
+            if check_correctness > 0 and self.args.verbose:
+                self.args.logger.info("gt: {}".format(gt))
+                self.args.logger.info("Pred: {}".format(pred))
+                self.args.logger.info("sentence: {}".format(input_text))
+
+                check_correctness -= 1
+
+        score = self.eval(preds, gts)
+        return score
+    
     def call_openai_api(self, model, prompt):
         import openai
         from config import OPENAI_API
@@ -315,15 +345,22 @@ class Inference(object):
         result = response['choices'][0]['message']['content']
         return result
 
-    def pred_by_generation(self, input_text, model):
+    def pred_by_generation(self, input_text, model) -> List[str]:
+        """
+        Generates the output by the model based on input_text and returns only the model output [no context]
+
+        Args:
+            input_text (str or List[str]): the input text
+            model (str): the model name
+        
+        """
         out = 'error!'
-        input_ids = self.tokenizer(
-            input_text, return_tensors="pt").input_ids.to("cuda")
+        # pad to the longest sequence in the batch and truncate all the sequences to the max model's length
+        input_ids = self.tokenizer(input_text, padding="longest", truncation=True, return_tensors="pt").input_ids.to("cuda")
 
         if 't5' in model or 'ul2' in model:
-            outputs = self.pipe.generate(
-                input_ids, max_length=self.args.generate_len, early_stopping=True)
-            out = self.tokenizer.decode(outputs[0])
+            outputs = self.pipe.generate(input_ids, max_length=self.args.generate_len, early_stopping=True)
+            out = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         elif model == 'EleutherAI/gpt-neox-20b':
             outputs = self.pipe.generate(input_ids,
@@ -334,7 +371,7 @@ class Inference(object):
                                          early_stopping=True,
                                          pad_token_id=self.tokenizer.eos_token_id)
 
-            out = self.tokenizer.decode(outputs[0])
+            out = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         elif model == "facebook/opt-66b":
             outputs = self.pipe.generate(input_ids)
@@ -346,7 +383,7 @@ class Inference(object):
                                          max_new_tokens=self.args.generate_len,
                                          early_stopping=True)
 
-            out = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            out = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         elif model in ['databricks/dolly-v1-6b', 'cerebras/Cerebras-GPT-13B']:
             outputs = self.pipe.generate(input_ids,
@@ -355,7 +392,7 @@ class Inference(object):
                                          pad_token_id=self.tokenizer.eos_token_id,
                                          early_stopping=True)
 
-            out = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            out = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         elif model == "tiiuae/falcon-40b-instruct":
             outputs = self.pipe.generate(input_ids,
@@ -364,7 +401,7 @@ class Inference(object):
                                          pad_token_id=self.tokenizer.eos_token_id,
                                          early_stopping=True)
 
-            out = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            out = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         return out
 
