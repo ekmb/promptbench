@@ -87,11 +87,8 @@ class GoalFunction(ReprMixin, ABC):
             queries_left = self.query_budget - self.num_queries
             attacked_text_list = attacked_text_list[:queries_left]
         self.num_queries += len(attacked_text_list)
-        print(f"attacked_text_list: {len(attacked_text_list)}")
+
         model_outputs = self._call_model_batch(attacked_text_list)
-        # model_outputs = self._call_model(attacked_text_list)
-        # [print(x) for x in attacked_text_list]
-        # import pdb; pdb.set_trace()
         for attacked_text, raw_output in zip(attacked_text_list, model_outputs):
             displayed_output = self._get_displayed_output(raw_output)
             goal_status = self._get_goal_status(

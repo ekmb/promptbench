@@ -86,10 +86,17 @@ def prompt_selection(logger, inference_model, prompts, max_samples=1000):
     # print("Default Time: ", time.time() - start_time)
 
     start_time = time.time()
-    acc_batch = inference_model.predict_batch(prompts, max_samples=max_samples)
-    prompt_dict = {prompt: acc_batch[idx] for idx, prompt in enumerate(prompts)}
-    print("Batch Time: ", time.time() - start_time)
-    print(prompt_dict)
+    try:
+        acc = inference_model.predict_batch(prompts, max_samples=max_samples)
+        prompt_dict = {prompt: acc[idx] for idx, prompt in enumerate(prompts)}
+    except:
+        logger.warninig("The model does not support batch inference! Running sequentially...")
+        prompt_dict = {}
+        for prompt in prompts:
+            acc = inference_model.predict(prompt)
+            prompt_dict[prompt] = acc
+            logger.info("{:.2f}, {}\n".format(acc*100, prompt))
+    
     sorted_prompts = sorted(prompt_dict.items(),
                             key=lambda x: x[1], reverse=True)
     return sorted_prompts
@@ -103,17 +110,25 @@ def attack(args, inference_model, RESULTS_DIR):
 
         for language in prompts_dict.keys():
             prompts = prompts_dict[language]
+            try:
+                acc = inference_model.predict_batch(prompts)
+                for idx in range(len(prompts)):
+                    args.logger.info("Language: {}, acc: {:.2f}%, prompt: {}\n".format(language, acc[idx]*100, prompts[idx]))
 
-            # for prompt in prompts:
-            #     acc = inference_model.predict(prompt)
+                with open(RESULTS_DIR+args.save_file_name+".txt", "a+") as f:
+                    f.write("Language: {}, acc: {:.2f}%, prompt: {}\n".format(language, acc*100, prompt))
+            except:
+                args.logger.warninig("The model does not support batch inference! Running sequentially...")
+                for prompt in prompts:
+                    acc = inference_model.predict(prompt)
+                    args.logger.info("Language: {}, acc: {:.2f}%, prompt: {}\n".format(
+                        language, acc*100, prompt))
 
-            acc_batch = inference_model.predict_batch(prompts)
-            for idx in range(len(prompts)):
-                args.logger.info("Language: {}, acc: {:.2f}%, prompt: {}\n".format(language, acc_batch[idx]*100, prompts[idx]))
-
-            with open(RESULTS_DIR+args.save_file_name+".txt", "a+") as f:
-                f.write("Language: {}, acc: {:.2f}%, prompt: {}\n".format(
-                    language, acc*100, prompt))
+                    with open(RESULTS_DIR+args.save_file_name+".txt", "a+") as f:
+                        f.write("Language: {}, acc: {:.2f}%, prompt: {}\n".format(
+                            language, acc*100, prompt))
+                    
+               
     elif args.attack in ['no', 'noattack', 'clean']:
         from config import PROMPT_SET_Promptbench_advglue as prompt_raw
         prompt = prompt_raw['clean'][args.dataset][0]
@@ -159,7 +174,7 @@ def attack(args, inference_model, RESULTS_DIR):
 
             for init_prompt, init_acc in sorted_prompts[:3]:
                 if init_acc > 0:
-                    print("Init prompt: {}".format(init_prompt))
+                    args.logger("Init prompt: {}".format(init_prompt))
                     init_acc, attacked_prompt, attacked_acc, dropped_acc = attack.attack(init_prompt)
                     args.logger.info("Original prompt: {}".format(init_prompt))
                     args.logger.info("Attacked prompt: {}".format(attacked_prompt.encode('utf-8')))

@@ -309,21 +309,6 @@ class Inference(object):
         score = self.eval(preds, gts)
         return score
 
-    # def __prepare_data(self, max_samples, prompts, data_dict, n_jobs: int=-2):
-    #     for idx in tqdm(range(max_samples)):
-    #         raw_data = self.args.data.get_content_by_idx(idx, self.args.dataset)
-
-    #     for prompt in prompts:
-    #         data_dict[prompt].append([self.process_input(prompt, raw_data)])
-
-    #     # TODO add n_jobs to params
-    #     data_dict = Parallel(n_jobs=-2)(delayed(self.prepare_inputs_for_generation)(prompt, raw_data) for prompt in tqdm(prompts))
-    #     return data_dict
-
-    def prepare_inputs_for_generation(self, prompt: str, raw_data: List[dict]):
-        """ Prepare input texts and labels """
-        return 
-
     def predict_by_local_inference_batch(self, model: str, prompts: List[str], max_samples: int=1000):
         data_len = len(self.args.data)
         if data_len > max_samples:
@@ -399,7 +384,6 @@ class Inference(object):
         # pad to the longest sequence in the batch and truncate all the sequences to the max model's length
         input_ids = self.tokenizer(input_text, padding="longest", truncation=True, return_tensors="pt").input_ids.to("cuda")
 
-        # location /usr/local/lib/python3.10/dist-packages/transformers/integrations/deepspeed.py(245)is_deepspeed_zero3_enabled()
         if 't5' in model or 'ul2' in model:
             if len(input_text) == 1:
                 outputs = self.pipe.generate(input_ids, max_length=self.args.generate_len, early_stopping=True)
