@@ -87,11 +87,11 @@ class GoalFunction(ReprMixin, ABC):
             queries_left = self.query_budget - self.num_queries
             attacked_text_list = attacked_text_list[:queries_left]
         self.num_queries += len(attacked_text_list)
-        
-        model_outputs = self._call_model(attacked_text_list)
         print(f"attacked_text_list: {len(attacked_text_list)}")
-        [print(x) for x in attacked_text_list]
-        import pdb; pdb.set_trace()
+        model_outputs = self._call_model_batch(attacked_text_list)
+        # model_outputs = self._call_model(attacked_text_list)
+        # [print(x) for x in attacked_text_list]
+        # import pdb; pdb.set_trace()
         for attacked_text, raw_output in zip(attacked_text_list, model_outputs):
             displayed_output = self._get_displayed_output(raw_output)
             goal_status = self._get_goal_status(
@@ -357,6 +357,20 @@ class PromptGoalFunction(GoalFunction):
             acc_list.append(acc)
         return acc_list
 
+    def _call_model_batch(self, text_list):
+        prompts = [prompt.text for prompt in text_list]
+        acc_list = self.inference.predict_batch(prompts, max_samples=self.max_samples)
+        # acc_list = []
+        # for prompt in text_list:
+        #     prompt = prompt.text
+        #     if self.verbose:
+        #         self.logger.info("Current prompt is: {}".format(prompt))
+        #     acc = self.inference.predict(prompt, max_samples=self.max_samples)
+        #     if self.verbose:
+        #         self.logger.info("Current acc: {:.2f}".format(acc*100))
+        #     acc_list.append(acc)
+        return acc_list
+    
     def _get_goal_status(self, model_output, text, check_skip=False):
         return super()._get_goal_status(model_output, text, check_skip)
 

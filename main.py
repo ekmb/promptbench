@@ -64,6 +64,7 @@ def get_args():
     parser.add_argument('--max_samples', type=int, default=1000, help="max number of samples to use from the dataset")
     parser.add_argument('--nemo_infer_cfg', type=str, default=None, help='path to NeMo inference config yaml')
     parser.add_argument('--nemo_model_path', type=str, default=None, help='path to .nemo model file')
+    parser.add_argument('--batch_size', type=int, default=32, help='batch size for inference')
 
     args = parser.parse_args()
     return args
@@ -72,12 +73,23 @@ def get_args():
 def prompt_selection(logger, inference_model, prompts, max_samples=1000):
     """Select the top 3 prompts to attack based on the accuracy
     """
-    prompt_dict = {}
+    
+    import time
 
-    for prompt in prompts:
-        acc = inference_model.predict(prompt, max_samples=max_samples)
-        prompt_dict[prompt] = acc
-        logger.info("{:.2f}, {}\n".format(acc*100, prompt))
+    start_time = time.time()
+    # prompt_dict = {}
+    # for prompt in prompts:
+    #     acc = inference_model.predict(prompt, max_samples=max_samples)
+    #     prompt_dict[prompt] = acc
+    #     logger.info("{:.2f}, {}\n".format(acc*100, prompt))
+    #     # print("{:.2f}, {}\n".format(acc*100, prompt))
+    # print("Default Time: ", time.time() - start_time)
+
+    start_time = time.time()
+    acc_batch = inference_model.predict_batch(prompts, max_samples=max_samples)
+    prompt_dict = {prompt: acc_batch[idx] for idx, prompt in enumerate(prompts)}
+    print("Batch Time: ", time.time() - start_time)
+    print(prompt_dict)
     sorted_prompts = sorted(prompt_dict.items(),
                             key=lambda x: x[1], reverse=True)
     return sorted_prompts
@@ -92,14 +104,16 @@ def attack(args, inference_model, RESULTS_DIR):
         for language in prompts_dict.keys():
             prompts = prompts_dict[language]
 
-            for prompt in prompts:
-                acc = inference_model.predict(prompt)
-                args.logger.info("Language: {}, acc: {:.2f}%, prompt: {}\n".format(
-                    language, acc*100, prompt))
+            # for prompt in prompts:
+            #     acc = inference_model.predict(prompt)
 
-                with open(RESULTS_DIR+args.save_file_name+".txt", "a+") as f:
-                    f.write("Language: {}, acc: {:.2f}%, prompt: {}\n".format(
-                        language, acc*100, prompt))
+            acc_batch = inference_model.predict_batch(prompts)
+            for idx in range(len(prompts)):
+                args.logger.info("Language: {}, acc: {:.2f}%, prompt: {}\n".format(language, acc_batch[idx]*100, prompts[idx]))
+
+            with open(RESULTS_DIR+args.save_file_name+".txt", "a+") as f:
+                f.write("Language: {}, acc: {:.2f}%, prompt: {}\n".format(
+                    language, acc*100, prompt))
     elif args.attack in ['no', 'noattack', 'clean']:
         from config import PROMPT_SET_Promptbench_advglue as prompt_raw
         prompt = prompt_raw['clean'][args.dataset][0]
@@ -146,12 +160,11 @@ def attack(args, inference_model, RESULTS_DIR):
             for init_prompt, init_acc in sorted_prompts[:3]:
                 if init_acc > 0:
                     print("Init prompt: {}".format(init_prompt))
-                    import pdb; pdb.set_trace()
                     init_acc, attacked_prompt, attacked_acc, dropped_acc = attack.attack(init_prompt)
                     args.logger.info("Original prompt: {}".format(init_prompt))
                     args.logger.info("Attacked prompt: {}".format(attacked_prompt.encode('utf-8')))
                     args.logger.info("Original acc: {:.2f}%, attacked acc: {:.2f}%, dropped acc: {:.2f}%".format(init_acc*100, attacked_acc*100, dropped_acc*100))
-                    import pdb; pdb.set_trace()
+                    
                     with open(RESULTS_DIR+args.save_file_name+".txt", "a+") as f:
                         f.write("Original prompt: {}\n".format(init_prompt))
                         f.write("Attacked prompt: {}\n".format(

@@ -1,10 +1,16 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-import openai
+try:
+    import openai
+except ImportError:
+    print("OpenAI API is not installed, please install it by running: pip install openai")
+
 from config import LABEL_SET, LABEL_TO_ID
 from tqdm import tqdm
 from typing import List
+from collections import defaultdict
+from joblib import Parallel, delayed
 
 """
 This clss implements the inference of the model (including create the model).
@@ -33,12 +39,12 @@ class Inference(object):
             """
 
             if self.model == 'google/flan-t5-large':
-                from transformers import T5Tokenizer, T5ForConditionalGeneration
+                from transformers import T5Tokenizer, T5ForConditionalGeneration, AutoModelForSeq2SeqLM
 
                 self.tokenizer = T5Tokenizer.from_pretrained(
-                    self.model, device_map="auto")
-                self.pipe = T5ForConditionalGeneration.from_pretrained(
-                    self.model, device_map="auto")
+                    self.model, device_map="cuda")
+                self.pipe = T5ForConditionalGeneration.from_pretrained(self.model, device_map="cuda")
+                self.pipe_batch = AutoModelForSeq2SeqLM.from_pretrained(self.model, device_map="cuda")
 
             elif self.model == 'EleutherAI/gpt-neox-20b':
                 from transformers import GPTNeoXForCausalLM, GPTNeoXTokenizerFast
@@ -228,6 +234,15 @@ class Inference(object):
             results = self.predict_by_local_inference(self.model, prompt, max_samples)
         return results
 
+    def predict_batch(self, prompt: List[str], max_samples=1000):
+        assert self.args.data is not None, "Please load data first!"
+
+        if self.model in ["chatgpt", "gpt4"]:
+            raise NotImplementedError("Batch inference is not implemented for openai api, use predict() instead.")
+        else:
+            results = self.predict_by_local_inference_batch(self.model, prompt, max_samples)
+        return results
+    
     def predict_by_openai_api(self, model, prompt):
         data_len = len(self.args.data)
         if data_len > 1000:
@@ -276,52 +291,79 @@ class Inference(object):
             raw_data = self.args.data.get_content_by_idx(idx, self.args.dataset)
             input_text, gt = self.process_input(prompt, raw_data)
 
-            raw_pred = self.pred_by_generation(input_text, model)
+            raw_pred = self.pred_by_generation(input_text, model)[0]
+            # non-open ai models return list of preds
+            if isinstance(raw_pred, list) and len(list) == 1:
+                raw_pred = raw_pred[0]
             pred = self.process_pred(raw_pred)
-
+        
             preds.append(pred)
             gts.append(gt)
-
+            
             if check_correctness > 0 and self.args.verbose:
                 self.args.logger.info("gt: {}".format(gt))
                 self.args.logger.info("Pred: {}".format(pred))
                 self.args.logger.info("sentence: {}".format(input_text))
-
                 check_correctness -= 1
 
         score = self.eval(preds, gts)
         return score
 
-    def predict_by_local_inference_list(self, model, prompt, max_samples=1000):
-        data_len = len(self.args.data)
+    # def __prepare_data(self, max_samples, prompts, data_dict, n_jobs: int=-2):
+    #     for idx in tqdm(range(max_samples)):
+    #         raw_data = self.args.data.get_content_by_idx(idx, self.args.dataset)
 
+    #     for prompt in prompts:
+    #         data_dict[prompt].append([self.process_input(prompt, raw_data)])
+
+    #     # TODO add n_jobs to params
+    #     data_dict = Parallel(n_jobs=-2)(delayed(self.prepare_inputs_for_generation)(prompt, raw_data) for prompt in tqdm(prompts))
+    #     return data_dict
+
+    def prepare_inputs_for_generation(self, prompt: str, raw_data: List[dict]):
+        """ Prepare input texts and labels """
+        return 
+
+    def predict_by_local_inference_batch(self, model: str, prompts: List[str], max_samples: int=1000):
+        data_len = len(self.args.data)
         if data_len > max_samples:
             data_len = max_samples
 
-        score = 0
-        check_correctness = 100
-        preds = []
+        scores = []
+        # TODO: why are we re-doing this multiple times?
+        raw_data = [self.args.data.get_content_by_idx(idx, self.args.dataset) for idx in range(data_len)]
+
+        if isinstance(prompts, str):
+            prompts = [prompts]
+
+        # dataset is preprocessed differently for every prompt, we're combining multiple versions of the dataset
+        # so that we can use batching across all prompts
+        all_data = []
+        for prompt in prompts:
+            all_data.extend([self.process_input(prompt, raw_data[idx]) for idx in range(len(raw_data))])
+
+        total_num_samples = len(all_data)
+        raw_dataset_size = len(raw_data)
+        assert total_num_samples == len(prompts) * raw_dataset_size
+
         gts = []
+        preds = []
+        i = 0
+        while i < total_num_samples:
+            batch = all_data[i : i + self.args.batch_size]
+            input_texts, batch_gts = zip(*batch)
+            gts.extend(batch_gts)
 
-        for idx in tqdm(range(data_len)):
-            raw_data = self.args.data.get_content_by_idx(idx, self.args.dataset)
-            input_text, gt = self.process_input(prompt, raw_data)
+            raw_batch_preds = self.pred_by_generation(input_text=input_texts, model=model)
+            preds.extend([self.process_pred(raw_pred) for raw_pred in raw_batch_preds])
+            i += self.args.batch_size
 
-            raw_pred = self.pred_by_generation(input_text, model)
-            pred = self.process_pred(raw_pred)
-
-            preds.append(pred)
-            gts.append(gt)
-
-            if check_correctness > 0 and self.args.verbose:
-                self.args.logger.info("gt: {}".format(gt))
-                self.args.logger.info("Pred: {}".format(pred))
-                self.args.logger.info("sentence: {}".format(input_text))
-
-                check_correctness -= 1
-
-        score = self.eval(preds, gts)
-        return score
+        # split preds and gts into lists of lists, where each sublist is the preds/gts for a single prompt
+        preds = [preds[i:i+raw_dataset_size] for i in range(0, len(preds), raw_dataset_size)]
+        gts = [gts[i:i+raw_dataset_size] for i in range(0, len(gts), raw_dataset_size)]
+        # calculate scores for each prompt
+        scores = [self.eval(prompt_preds, prompt_gts) for prompt_preds, prompt_gts in zip(preds, gts)]
+        return scores
     
     def call_openai_api(self, model, prompt):
         import openai
@@ -345,21 +387,24 @@ class Inference(object):
         result = response['choices'][0]['message']['content']
         return result
 
-    def pred_by_generation(self, input_text, model) -> List[str]:
+    def pred_by_generation(self, input_text: List[str], model: str) -> List[str]:
         """
         Generates the output by the model based on input_text and returns only the model output [no context]
 
         Args:
             input_text (str or List[str]): the input text
             model (str): the model name
-        
         """
         out = 'error!'
         # pad to the longest sequence in the batch and truncate all the sequences to the max model's length
         input_ids = self.tokenizer(input_text, padding="longest", truncation=True, return_tensors="pt").input_ids.to("cuda")
 
+        # location /usr/local/lib/python3.10/dist-packages/transformers/integrations/deepspeed.py(245)is_deepspeed_zero3_enabled()
         if 't5' in model or 'ul2' in model:
-            outputs = self.pipe.generate(input_ids, max_length=self.args.generate_len, early_stopping=True)
+            if len(input_text) == 1:
+                outputs = self.pipe.generate(input_ids, max_length=self.args.generate_len, early_stopping=True)
+            else:
+                outputs = self.pipe_batch.generate(input_ids, max_length=self.args.generate_len, early_stopping=True)
             out = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         elif model == 'EleutherAI/gpt-neox-20b':
@@ -540,9 +585,7 @@ class Inference(object):
         return pred
 
     def _process_cls_pred(self, raw_pred):
-
         pred = raw_pred.lower()
-
         pred = pred.replace("<pad>", "")
         pred = pred.replace("</s>", "")
 
