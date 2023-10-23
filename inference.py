@@ -6,6 +6,17 @@ try:
 except ImportError:
     print("OpenAI API is not installed, please install it by running: pip install openai")
 
+try:
+    import sys
+    import os
+    from omegaconf import OmegaConf
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    sys.path.append(os.path.join(dir_path, "nemo_utils"))
+    from megatron_gpt_eval import nemo_init_model, nemo_generate
+    NEMO_AVAILABLE = True
+except:
+    NEMO_AVAILABLE = False
+
 from config import LABEL_SET, LABEL_TO_ID
 from tqdm import tqdm
 from typing import List
@@ -23,6 +34,7 @@ class Inference(object):
         self.error_analysis = False
         self.args = args
         self.model = args.model
+        self.nemo_cfg, self.nemo_trainer = None, None
         self.create_model()
 
     def create_model(self):
@@ -115,8 +127,31 @@ class Inference(object):
                     "databricks/dolly-v1-6b", device_map="auto", torch_dtype=torch.float16)
 
             elif self.model == "nemo":
-                pass
+                if not NEMO_AVAILABLE:
+                    raise ImportError("NeMo is not installed")
+                
+                dir_path = os.path.dirname(os.path.realpath(__file__))
+                cfg = os.path.abspath(f"{dir_path}/nemo_utils/nemo_cfgs/megatron_gpt_inference.yaml")
 
+                cfg = OmegaConf.load(cfg)
+                cfg.inference.tokens_to_generate = self.args.generate_len
+
+                # update NeMo config if non None nemo-* args provided
+                for arg_name in vars(self.args):
+                    if arg_name.startswith("nemo_") and getattr(self.args, arg_name) is not None:
+                        if arg_name == "nemo_model_path":
+                            if self.args.nemo_model_path is None or not os.path.exists(self.args.nemo_model_path):
+                                raise ValueError(f"NeMo model path {self.args.nemo_model_path} does not exist")
+                            else:
+                                cfg.gpt_model_file = self.args.nemo_model_path
+
+                        elif arg_name == "nemo_devices":
+                            cfg.trainer.devices = self.args.nemo_devices
+                        else:
+                            cfg.inference[arg_name] = getattr(self.args, arg_name)
+                                
+                self.nemo_cfg = cfg
+                self.pipe, self.nemo_trainer = nemo_init_model(cfg)
             else:
                 raise NotImplementedError("The model is not implemented!")
 
@@ -331,17 +366,22 @@ class Inference(object):
         raw_dataset_size = len(raw_data)
         assert total_num_samples == len(prompts) * raw_dataset_size
 
-        gts = []
-        preds = []
-        i = 0
-        while i < total_num_samples:
-            batch = all_data[i : i + self.args.batch_size]
-            input_texts, batch_gts = zip(*batch)
-            gts.extend(batch_gts)
-
+        if model == "nemo":
+            input_texts, gts = zip(*all_data)
             raw_batch_preds = self.pred_by_generation(input_text=input_texts, model=model)
-            preds.extend([self.process_pred(raw_pred) for raw_pred in raw_batch_preds])
-            i += self.args.batch_size
+            preds = [self.process_pred(raw_pred) for raw_pred in raw_batch_preds]   
+        else:
+            gts = []
+            preds = []
+            i = 0
+            while i < total_num_samples:
+                batch = all_data[i : i + self.args.batch_size]
+                input_texts, batch_gts = zip(*batch)
+                gts.extend(batch_gts)
+
+                raw_batch_preds = self.pred_by_generation(input_text=input_texts, model=model)
+                preds.extend([self.process_pred(raw_pred) for raw_pred in raw_batch_preds])
+                i += self.args.batch_size
 
         # split preds and gts into lists of lists, where each sublist is the preds/gts for a single prompt
         preds = [preds[i:i+raw_dataset_size] for i in range(0, len(preds), raw_dataset_size)]
@@ -381,6 +421,21 @@ class Inference(object):
             model (str): the model name
         """
         out = 'error!'
+
+        if model == "nemo":
+            out = nemo_generate(model=self.pipe,
+                                prompts=input_text,
+                                trainer=self.nemo_trainer,
+                                cfg=self.nemo_cfg,
+                                batch_size=self.args.batch_size)
+            preds = []
+            for pred in out:
+                preds.extend(pred["sentences"])
+            
+            assert len(preds) == len(input_text)
+            for i in range(len(input_text)):
+                preds[i] = preds[i][len(input_text[i]):].strip()
+            return preds
         # pad to the longest sequence in the batch and truncate all the sequences to the max model's length
         input_ids = self.tokenizer(input_text, padding="longest", truncation=True, return_tensors="pt").input_ids.to("cuda")
 
@@ -393,12 +448,12 @@ class Inference(object):
 
         elif model == 'EleutherAI/gpt-neox-20b':
             outputs = self.pipe.generate(input_ids,
-                                         #  do_sample=True,
-                                         temperature=0.00001,
-                                         #  max_length=50,
-                                         max_new_tokens=self.args.generate_len,
-                                         early_stopping=True,
-                                         pad_token_id=self.tokenizer.eos_token_id)
+                                        #  do_sample=True,
+                                        temperature=0.00001,
+                                        #  max_length=50,
+                                        max_new_tokens=self.args.generate_len,
+                                        early_stopping=True,
+                                        pad_token_id=self.tokenizer.eos_token_id)
 
             out = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
@@ -408,27 +463,27 @@ class Inference(object):
 
         elif model in ["llama-13b", "llama2-13b", 'llama2-13b-chat', "vicuna-13b", "vicuna-13b-v1.3", "llama2-7b", "llama2-7b-chat"]:
             outputs = self.pipe.generate(input_ids,
-                                         temperature=0,
-                                         max_new_tokens=self.args.generate_len,
-                                         early_stopping=True)
+                                        temperature=0,
+                                        max_new_tokens=self.args.generate_len,
+                                        early_stopping=True)
 
             out = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         elif model in ['databricks/dolly-v1-6b', 'cerebras/Cerebras-GPT-13B']:
             outputs = self.pipe.generate(input_ids,
-                                         temperature=0,
-                                         max_new_tokens=self.args.generate_len,
-                                         pad_token_id=self.tokenizer.eos_token_id,
-                                         early_stopping=True)
+                                        temperature=0,
+                                        max_new_tokens=self.args.generate_len,
+                                        pad_token_id=self.tokenizer.eos_token_id,
+                                        early_stopping=True)
 
             out = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         elif model == "tiiuae/falcon-40b-instruct":
             outputs = self.pipe.generate(input_ids,
-                                         temperature=0,
-                                         max_new_tokens=self.args.generate_len,
-                                         pad_token_id=self.tokenizer.eos_token_id,
-                                         early_stopping=True)
+                                        temperature=0,
+                                        max_new_tokens=self.args.generate_len,
+                                    pad_token_id=self.tokenizer.eos_token_id,
+                                        early_stopping=True)
 
             out = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
@@ -532,6 +587,7 @@ class Inference(object):
         pred = raw_pred.lower()
         pred = pred.replace("<pad>", "")
         pred = pred.replace("</s>", "")
+        pred = pred.replace("<extra_id_1>", "") # for nemo
         pred = pred.strip(",._\"\'-+=!?()&^%$#@:\\|\{\}[]<>/`\n\t\r\v\f ")
 
         return pred
@@ -569,7 +625,11 @@ class Inference(object):
         return pred
 
     def _process_cls_pred(self, raw_pred):
-        pred = raw_pred.lower()
+        try:
+            pred = raw_pred.lower()
+        except:
+            import pdb; pdb.set_trace()
+            print()
         pred = pred.replace("<pad>", "")
         pred = pred.replace("</s>", "")
 

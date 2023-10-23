@@ -30,6 +30,20 @@ def create_logger(log_path):
 
     return logger
 
+def _add_nemo_args(parser):
+    """Add NeMo arguments to update inference config, see promptbench/nemo_utils/nemo_cfgs/megatron_gpt_inference.yaml"""
+    group = parser.add_argument_group(title='NeMo arguments')
+    group.add_argument('--nemo_model_path', type=str, default=None, help='path to .nemo model file')
+    group.add_argument('--nemo_greedy', action='store_true', help='Whether or not to use sampling ; use greedy decoding otherwise')
+    group.add_argument('--nemo_top_k', type=int, default=0, help='The number of highest probability vocabulary tokens to keep for top-k-filtering.')
+    group.add_argument('--nemo_top_p', type=float, default=0.9, help='If set to float < 1, only the most probable tokens with probabilities that add up to top_p or higher are kept for generation.')
+    group.add_argument('--nemo_temperature', type=float, default=1.0, help='sampling temperature')
+    group.add_argument('--nemo_add_BOS', action='store_true', help='add the bos token at the begining of the prompt')
+    group.add_argument('--nemo_all_probs', action='store_true', help='whether return the log prob for all the tokens in vocab')
+    group.add_argument('--nemo_repetition_penalty', type=float, default=1.2, help='The parameter for repetition penalty. 1.0 means no penalty.')
+    group.add_argument('--nemo_batch_size', type=int, default=32, help='batch size for inference')
+    group.add_argument('--nemo_devices', type=int, default=1, help='Number of GPUs to use for inference')
+    return parser
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -62,10 +76,9 @@ def get_args():
     parser.add_argument('--generate_len', type=int, default=4)
     parser.add_argument('--prompt_selection', action='store_true')
     parser.add_argument('--max_samples', type=int, default=1000, help="max number of samples to use from the dataset")
-    parser.add_argument('--nemo_infer_cfg', type=str, default=None, help='path to NeMo inference config yaml')
-    parser.add_argument('--nemo_model_path', type=str, default=None, help='path to .nemo model file')
     parser.add_argument('--batch_size', type=int, default=32, help='batch size for inference')
 
+    parser = _add_nemo_args(parser)
     args = parser.parse_args()
     return args
 
@@ -86,11 +99,11 @@ def prompt_selection(logger, inference_model, prompts, max_samples=1000):
     # print("Default Time: ", time.time() - start_time)
 
     start_time = time.time()
-    try:
+    if "predict_batch" in dir(inference_model):
         acc = inference_model.predict_batch(prompts, max_samples=max_samples)
         prompt_dict = {prompt: acc[idx] for idx, prompt in enumerate(prompts)}
-    except:
-        logger.warninig("The model does not support batch inference! Running sequentially...")
+    else:
+        logger.warning("The model does not support batch inference! Running sequentially...")
         prompt_dict = {}
         for prompt in prompts:
             acc = inference_model.predict(prompt)
@@ -110,14 +123,14 @@ def attack(args, inference_model, RESULTS_DIR):
 
         for language in prompts_dict.keys():
             prompts = prompts_dict[language]
-            try:
+            if "predict_batch" in dir(inference_model):
                 acc = inference_model.predict_batch(prompts)
                 for idx in range(len(prompts)):
                     args.logger.info("Language: {}, acc: {:.2f}%, prompt: {}\n".format(language, acc[idx]*100, prompts[idx]))
 
                 with open(RESULTS_DIR+args.save_file_name+".txt", "a+") as f:
                     f.write("Language: {}, acc: {:.2f}%, prompt: {}\n".format(language, acc*100, prompt))
-            except:
+            else:
                 args.logger.warninig("The model does not support batch inference! Running sequentially...")
                 for prompt in prompts:
                     acc = inference_model.predict(prompt)
@@ -174,7 +187,7 @@ def attack(args, inference_model, RESULTS_DIR):
 
             for init_prompt, init_acc in sorted_prompts[:3]:
                 if init_acc > 0:
-                    args.logger("Init prompt: {}".format(init_prompt))
+                    args.logger.info("Init prompt: {}".format(init_prompt))
                     init_acc, attacked_prompt, attacked_acc, dropped_acc = attack.attack(init_prompt)
                     args.logger.info("Original prompt: {}".format(init_prompt))
                     args.logger.info("Attacked prompt: {}".format(attacked_prompt.encode('utf-8')))
