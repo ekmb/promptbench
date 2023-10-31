@@ -66,6 +66,9 @@ MODEL_SET = [
     'nemo',
 ]
 
+NEMO_TRT_MODELS = ["GPT-8B-SFT", "GPT-8B-RLHF"]
+NEMO_PROMPT = "<extra_id_0>System\n\n<extra_id_1>User\n{prompt}\n<extra_id_1>Assistant\n"
+
 LABEL_TO_ID = {
     'mmlu': {'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D'},
     'sst2': {'negative': 0, 'positive': 1, '0': 0, '1': 1, 0: 0, 1: 1},
