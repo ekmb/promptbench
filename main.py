@@ -231,7 +231,7 @@ def main(args):
             if args.nemo_model_path not in NEMO_TRT_MODELS:
                 raise ValueError("Please specify a valid NeMo model for server inference!")
         elif args.nemo_model_path is None or not os.path.exists(args.nemo_model_path):
-            raise ValueError("Please specify a valid .nemo path")
+            raise ValueError(f"{args.nemo_model_path} not found. Please specify a valid .nemo path")
         
         log_model_name = f"{args.nemo_model_path}_server" if args.nemo_use_server else os.path.basename(args.nemo_model_path).replace(".nemo", "")
 

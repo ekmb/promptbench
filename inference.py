@@ -437,7 +437,7 @@ class Inference(object):
         out = 'error!'
 
         if model == "nemo":
-            if TRT_AVAILABLE:
+            if self.args.nemo_use_server and TRT_AVAILABLE:
                 preds = query_llm(url=self.args.nemo_url, model_name=self.args.nemo_model_path,prompts=input_text,
                                   max_output_token=self.args.generate_len,
                                   top_k=self.args.nemo_top_k,
@@ -446,11 +446,7 @@ class Inference(object):
                                   init_timeout=self.args.nemo_init_timeout)
                 return [p[0] for p in preds]
             else:
-                out = nemo_generate(model=self.pipe,
-                                    prompts=input_text,
-                                    trainer=self.nemo_trainer,
-                                    cfg=self.nemo_cfg,
-                                    batch_size=self.args.batch_size)
+                out = nemo_generate(model=self.pipe, prompts=input_text,trainer=self.nemo_trainer,cfg=self.nemo_cfg,batch_size=self.args.batch_size)
                 preds = []
                 for pred in out:
                     preds.extend(pred["sentences"])
