@@ -68,6 +68,7 @@ def get_args():
         'no', 
         'noattack',
         'clean',
+        'nemo'
     ])
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument('--output_dir', type=str, default='./')

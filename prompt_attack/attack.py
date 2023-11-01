@@ -19,6 +19,7 @@ from textattack.attack_results import (
     SkippedAttackResult,
     SuccessfulAttackResult,
 )
+from textattack.search_methods.greedy_search import GreedySearch
 from textattack.constraints import Constraint, PreTransformationConstraint
 from textattack.goal_function_results import GoalFunctionResultStatus
 from textattack.goal_functions import GoalFunction
@@ -609,7 +610,18 @@ def create_attack(args, goal_function):
         from prompt_attack.search import BruteForceSearch
         transformation = StressTestTransformation()
         constraints = []
-        search_method = BruteForceSearch() 
+        search_method = BruteForceSearch()
+    elif args.attack == "nemo":
+        from textattack.transformations import (
+            CompositeTransformation,
+            WordSwapPunctuationCharacterInsertion,
+            WordSwapRandomCharacterCase,
+            WordSwapTabCharacterInsertion,
+            WordSwapWhitespaceCharacterInsertion,
+        )
+        transformation = CompositeTransformation([WordSwapPunctuationCharacterInsertion(), WordSwapRandomCharacterCase(), WordSwapTabCharacterInsertion(), WordSwapWhitespaceCharacterInsertion()])
+        constraints = [RepeatModification(), StopwordModification()]
+        search_method = GreedySearch()
     else:
         raise NotImplementedError
     
@@ -618,3 +630,4 @@ def create_attack(args, goal_function):
     goal_function = goal_function
     attack = AdvPromptAttack(goal_function, constraints, transformation, search_method)
     return attack
+# python main.py --model meta-llama/Llama-2-13b-chat-hf --dataset glue --attack nemo --shot 0
