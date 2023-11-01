@@ -171,7 +171,7 @@ def attack(args, inference_model, RESULTS_DIR):
         # each dataset has different predifiend prompts, the number of prompts can vary
         run_list = [
             TASK_ORIENTED_PROMPT_SET[args.dataset],
-            ROLE_ORIENTED_PROMPT_SET[args.dataset],
+            # ROLE_ORIENTED_PROMPT_SET[args.dataset],
         ]
 
         for prompts in run_list:

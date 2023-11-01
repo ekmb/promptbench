@@ -455,7 +455,8 @@ class Inference(object):
 
                 # remove context from output
                 for i in range(len(input_text)):
-                    preds[i] = preds[i][len(input_text[i]):].strip()
+                    preds[i] = preds[i][len(input_text[i]):]
+                    preds[i] = preds[i].replace("<extra_id_1>System", "").replace("<extra_id_1>system", "").replace("<extra_id_1>", "").strip()
                 return preds
         # pad to the longest sequence in the batch and truncate all the sequences to the max model's length
         input_ids = self.tokenizer(input_text, padding="longest", truncation=True, return_tensors="pt").input_ids.to("cuda")
@@ -669,11 +670,7 @@ class Inference(object):
         return pred
 
     def _process_cls_pred(self, raw_pred):
-        try:
-            pred = raw_pred.lower()
-        except Exeption as e:
-            print(raw_pred)
-            raise e
+        pred = raw_pred.lower()
         pred = pred.replace("<pad>", "")
         pred = pred.replace("</s>", "")
 
