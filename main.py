@@ -249,7 +249,8 @@ def main(args):
 
     logger = create_logger(LOGS_DIR+file_name+".log")
     logger.info(args)
-
+    with open(RESULTS_DIR+args.save_file_name+".txt", "a+") as f
+        f.write(str(args)+"\n")
     args.logger = logger
 
     attack(args, inference_model, RESULTS_DIR)
