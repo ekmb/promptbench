@@ -353,7 +353,6 @@ class Inference(object):
         
             preds.append(pred)
             gts.append(gt)
-            
             if check_correctness > 0 and self.args.verbose:
                 self.args.logger.info("gt: {}".format(gt))
                 self.args.logger.info("Pred: {}".format(pred))
@@ -393,9 +392,10 @@ class Inference(object):
             batch = all_data[start_idx : start_idx + self.args.batch_size]
             input_texts, batch_gts = zip(*batch)
             gts.extend(batch_gts)
-
+            
             raw_batch_preds = self.pred_by_generation(input_text=input_texts, model=model)
             preds.extend([self.process_pred(raw_pred) for raw_pred in raw_batch_preds])
+
         assert len(preds) == total_num_samples
         # split preds and gts into lists of lists, where each sublist is the preds/gts for a single prompt
         preds = [preds[i:i+raw_dataset_size] for i in range(0, len(preds), raw_dataset_size)]
@@ -457,6 +457,7 @@ class Inference(object):
                 for i in range(len(input_text)):
                     preds[i] = preds[i][len(input_text[i]):]
                     preds[i] = preds[i].replace("<extra_id_1>System", "").replace("<extra_id_1>system", "").replace("<extra_id_1>", "").strip()
+                    preds[i] = preds[i].split("\n")[0].strip()
                 return preds
         # pad to the longest sequence in the batch and truncate all the sequences to the max model's length
         input_ids = self.tokenizer(input_text, padding="longest", truncation=True, return_tensors="pt").input_ids.to("cuda")
