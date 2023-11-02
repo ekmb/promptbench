@@ -41,7 +41,6 @@ def _add_nemo_args(parser):
     group.add_argument('--nemo_add_BOS', action='store_true', help='add the bos token at the begining of the prompt')
     group.add_argument('--nemo_all_probs', action='store_true', help='whether return the log prob for all the tokens in vocab')
     group.add_argument('--nemo_repetition_penalty', type=float, default=1.2, help='The parameter for repetition penalty. 1.0 means no penalty.')
-    group.add_argument('--nemo_batch_size', type=int, default=32, help='batch size for inference')
     group.add_argument('--nemo_devices', type=int, default=1, help='Number of GPUs to use for inference')
     group.add_argument('--nemo_url', type=str, default="localhost:8000", help='url for server inference')
     group.add_argument('--nemo_init_timeout', type=float, default=600.0, help='timeout for server inference')
@@ -249,7 +248,7 @@ def main(args):
 
     logger = create_logger(LOGS_DIR+file_name+".log")
     logger.info(args)
-    with open(RESULTS_DIR+args.save_file_name+".txt", "a+") as f
+    with open(RESULTS_DIR+args.save_file_name+".txt", "a+") as f:
         f.write(str(args)+"\n")
     args.logger = logger
 

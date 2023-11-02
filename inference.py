@@ -154,7 +154,8 @@ class Inference(object):
 
                 cfg = OmegaConf.load(cfg)
                 cfg.inference.tokens_to_generate = self.args.generate_len
-
+                cfg.inference.batch_size = self.args.batch_size
+                
                 # update NeMo config if non None nemo-* args provided
                 for arg_name in vars(self.args):
                     if arg_name.startswith("nemo_") and getattr(self.args, arg_name) is not None:
