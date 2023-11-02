@@ -221,8 +221,7 @@ def main(args):
     RESULTS_DIR = os.path.join(args.output_dir, "results/" + save_dir)
 
     for DIR in [LOGS_DIR, RESULTS_DIR]:
-        if not os.path.isdir(DIR):
-            os.makedirs(DIR)
+        os.makedirs(DIR, exists_ok=True)
 
     model_name = args.model.replace('/', '_')
     if args.model == "nemo":
