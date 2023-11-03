@@ -1,0 +1,5 @@
+# run inside  nvcr.io/ea-bignlp/beta-inf-prerelease/infer:23.10.v1 container
+lru-dict==1.1.8
+textattack==0.3.8
+tensorflow_hub
+tensorflow==2.11.0

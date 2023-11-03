@@ -6,18 +6,30 @@ try:
 except ImportError:
     print("OpenAI API is not installed, please install it by running: pip install openai")
 
+import sys
+import os
+import math
+dir_path = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(dir_path, "nemo_utils"))
+
 try:
-    import sys
+    # to use Nemo generation directly
     import os
     from omegaconf import OmegaConf
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    sys.path.append(os.path.join(dir_path, "nemo_utils"))
     from megatron_gpt_eval import nemo_init_model, nemo_generate
     NEMO_AVAILABLE = True
 except:
     NEMO_AVAILABLE = False
 
-from config import LABEL_SET, LABEL_TO_ID
+try:
+    # to use TRT-LLM
+    TRT_AVAILABLE = True
+    from pytriton.client import ModelClient
+    from trt_infer import query_llm
+except:
+    TRT_AVAILABLE = False
+
+from config import LABEL_SET, LABEL_TO_ID, NEMO_PROMPT
 from tqdm import tqdm
 from typing import List
 from collections import defaultdict
@@ -51,12 +63,11 @@ class Inference(object):
             """
 
             if self.model == 'google/flan-t5-large':
-                from transformers import T5Tokenizer, T5ForConditionalGeneration, AutoModelForSeq2SeqLM
+                from transformers import T5Tokenizer, T5ForConditionalGeneration
 
                 self.tokenizer = T5Tokenizer.from_pretrained(
                     self.model, device_map="cuda")
                 self.pipe = T5ForConditionalGeneration.from_pretrained(self.model, device_map="cuda")
-                self.pipe_batch = AutoModelForSeq2SeqLM.from_pretrained(self.model, device_map="cuda")
 
             elif self.model == 'EleutherAI/gpt-neox-20b':
                 from transformers import GPTNeoXForCausalLM, GPTNeoXTokenizerFast
@@ -127,6 +138,13 @@ class Inference(object):
                     "databricks/dolly-v1-6b", device_map="auto", torch_dtype=torch.float16)
 
             elif self.model == "nemo":
+                if self.args.nemo_use_server:
+                    if not TRT_AVAILABLE:
+                        raise ImportError("TRT is not installed")
+
+                    # the model is loaded on the server, we only need to send the request
+                    return
+
                 if not NEMO_AVAILABLE:
                     raise ImportError("NeMo is not installed")
                 
@@ -135,7 +153,8 @@ class Inference(object):
 
                 cfg = OmegaConf.load(cfg)
                 cfg.inference.tokens_to_generate = self.args.generate_len
-
+                cfg.inference.batch_size = self.args.batch_size
+                
                 # update NeMo config if non None nemo-* args provided
                 for arg_name in vars(self.args):
                     if arg_name.startswith("nemo_") and getattr(self.args, arg_name) is not None:
@@ -334,7 +353,6 @@ class Inference(object):
         
             preds.append(pred)
             gts.append(gt)
-            
             if check_correctness > 0 and self.args.verbose:
                 self.args.logger.info("gt: {}".format(gt))
                 self.args.logger.info("Pred: {}".format(pred))
@@ -366,23 +384,19 @@ class Inference(object):
         raw_dataset_size = len(raw_data)
         assert total_num_samples == len(prompts) * raw_dataset_size
 
-        if model == "nemo":
-            input_texts, gts = zip(*all_data)
+        gts = []
+        preds = []
+        num_iter = math.ceil(1.0 * total_num_samples / self.args.batch_size)
+        for batch_id in tqdm(range(num_iter)):
+            start_idx = batch_id * self.args.batch_size
+            batch = all_data[start_idx : start_idx + self.args.batch_size]
+            input_texts, batch_gts = zip(*batch)
+            gts.extend(batch_gts)
+            
             raw_batch_preds = self.pred_by_generation(input_text=input_texts, model=model)
-            preds = [self.process_pred(raw_pred) for raw_pred in raw_batch_preds]   
-        else:
-            gts = []
-            preds = []
-            i = 0
-            while i < total_num_samples:
-                batch = all_data[i : i + self.args.batch_size]
-                input_texts, batch_gts = zip(*batch)
-                gts.extend(batch_gts)
+            preds.extend([self.process_pred(raw_pred) for raw_pred in raw_batch_preds])
 
-                raw_batch_preds = self.pred_by_generation(input_text=input_texts, model=model)
-                preds.extend([self.process_pred(raw_pred) for raw_pred in raw_batch_preds])
-                i += self.args.batch_size
-
+        assert len(preds) == total_num_samples
         # split preds and gts into lists of lists, where each sublist is the preds/gts for a single prompt
         preds = [preds[i:i+raw_dataset_size] for i in range(0, len(preds), raw_dataset_size)]
         gts = [gts[i:i+raw_dataset_size] for i in range(0, len(gts), raw_dataset_size)]
@@ -423,30 +437,36 @@ class Inference(object):
         out = 'error!'
 
         if model == "nemo":
-            out = nemo_generate(model=self.pipe,
-                                prompts=input_text,
-                                trainer=self.nemo_trainer,
-                                cfg=self.nemo_cfg,
-                                batch_size=self.args.batch_size)
-            preds = []
-            for pred in out:
-                preds.extend(pred["sentences"])
-            
-            assert len(preds) == len(input_text)
-            for i in range(len(input_text)):
-                preds[i] = preds[i][len(input_text[i]):].strip()
-            return preds
+            if self.args.nemo_use_server and TRT_AVAILABLE:
+                preds = query_llm(url=self.args.nemo_url, model_name=self.args.nemo_model_path,prompts=input_text,
+                                  max_output_token=self.args.generate_len,
+                                  top_k=self.args.nemo_top_k,
+                                  top_p=self.args.nemo_top_p,
+                                  temperature=self.args.nemo_temperature,
+                                  init_timeout=self.args.nemo_init_timeout)
+                return [p[0] for p in preds]
+            else:
+                out = nemo_generate(model=self.pipe, prompts=input_text,trainer=self.nemo_trainer,cfg=self.nemo_cfg,batch_size=self.args.batch_size)
+                preds = []
+                for pred in out:
+                    preds.extend(pred["sentences"])
+                
+                assert len(preds) == len(input_text)
+
+                # remove context from output
+                for i in range(len(input_text)):
+                    preds[i] = preds[i][len(input_text[i]):]
+                    preds[i] = preds[i].replace("<extra_id_1>System", "").replace("<extra_id_1>system", "").replace("<extra_id_1>", "").strip()
+                    preds[i] = preds[i].split("\n")[0].strip()
+                return preds
         # pad to the longest sequence in the batch and truncate all the sequences to the max model's length
         if not self.tokenizer.pad_token:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
         input_ids = self.tokenizer(input_text, padding="longest", truncation=True, return_tensors="pt").input_ids.to("cuda")
-
+      
         if 't5' in model or 'ul2' in model:
-            if len(input_text) == 1:
-                outputs = self.pipe.generate(input_ids, max_length=self.args.generate_len, early_stopping=True)
-            else:
-                outputs = self.pipe_batch.generate(input_ids, max_length=self.args.generate_len, early_stopping=True)
+            outputs = self.pipe.generate(input_ids, max_length=self.args.generate_len, early_stopping=True)
             out = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         elif model == 'EleutherAI/gpt-neox-20b':
@@ -500,8 +520,11 @@ class Inference(object):
             input_text += "\n" + \
                 self.args.data.get_few_shot_examples(raw_data['task'])
 
-        input_text += ("Question: " + question + '\nAnswer: ')
-
+        input_text += ("Question: " + question)
+        if self.args.model == "nemo":
+            input_text = NEMO_PROMPT.replace("{prompt}", input_text)
+        else:
+            input_text += '\nAnswer: '
         return input_text, label
 
     def _process_bool_logic_input(self, prompt, raw_data):
@@ -512,8 +535,11 @@ class Inference(object):
             input_text += "\n" + \
                 self.args.data.get_few_shot_examples(raw_data['task'])
 
-        input_text += ("Question: " + question + '\nAnswer: ')
-
+        input_text += ("Question: " + question)
+        if self.args.model == "nemo":
+            input_text = NEMO_PROMPT.replace("{prompt}", input_text)
+        else:
+            input_text += '\nAnswer: '
         return input_text, label
 
     def _process_math_input(self, prompt, raw_data):
@@ -526,8 +552,11 @@ class Inference(object):
             input_text += "\n" + \
                 self.args.data.get_few_shot_examples(raw_data['task'])
 
-        input_text += ("Question: " + question + '\nAnswer: ')
-
+        input_text += ("Question: " + question)
+        if self.args.model == "nemo":
+            input_text = NEMO_PROMPT.replace("{prompt}", input_text)
+        else:
+            input_text += '\nAnswer: '
         return input_text, label
 
     def _process_trans_input(self, prompt, raw_data):
@@ -540,7 +569,11 @@ class Inference(object):
         if self.args.shot > 0:
             input_text += "\n"+self.args.data.get_few_shot_examples(task)
 
-        input_text += (source + '\nAnswer: ')
+        input_text += content
+        if self.args.model == "nemo":
+            input_text = NEMO_PROMPT.replace("{prompt}", input_text)
+        else:
+            input_text += '\nAnswer: '
         return input_text, target
 
     def _process_squad_v2_input(self, prompt, raw_data):
@@ -551,8 +584,11 @@ class Inference(object):
             input_text += "\n" + \
                 self.args.data.get_few_shot_examples(self.args.dataset)
 
-        input_text += (content + "Answer: ")
-
+        input_text += content
+        if self.args.model == "nemo":
+            input_text = NEMO_PROMPT.replace("{prompt}", input_text)
+        else:
+            input_text += "Answer: "
         return input_text, id
 
     def _process_qa_input(self, prompt, raw_data):
@@ -565,8 +601,11 @@ class Inference(object):
             input_text += "\n" + \
                 self.args.data.get_few_shot_examples(task.replace(" ", "_"))
 
-        input_text += content + "\nAnswer: "
-
+        input_text += content
+        if self.args.model == "nemo":
+            input_text = NEMO_PROMPT.replace("{prompt}", input_text)
+        else:
+            input_text += "\nAnswer: "
         return input_text, label
 
     def _process_cls_input(self, prompt, raw_data):
@@ -576,14 +615,17 @@ class Inference(object):
         input_text = prompt
 
         if self.args.shot > 0:
-            few_shot_examples = self.args.data.get_few_shot_examples(
-                self.args.dataset)
+            few_shot_examples = self.args.data.get_few_shot_examples(self.args.dataset)
             input_text += "\n"+few_shot_examples
             if self.args.dataset == "sst2" or self.args.dataset == "cola":
                 input_text += "Sentence: "
 
-        input_text += (content + ' Answer: ')
-
+        input_text += content
+        # TODO fix few shot examples for NeMo prompt
+        if self.args.model == "nemo":
+            input_text = NEMO_PROMPT.replace("{prompt}", input_text)
+        else:
+            input_text += ' Answer: '
         return input_text, label
 
     def _process_bool_logic_pred(self, raw_pred):
@@ -628,11 +670,7 @@ class Inference(object):
         return pred
 
     def _process_cls_pred(self, raw_pred):
-        try:
-            pred = raw_pred.lower()
-        except:
-            import pdb; pdb.set_trace()
-            print()
+        pred = raw_pred.lower()
         pred = pred.replace("<pad>", "")
         pred = pred.replace("</s>", "")
 
@@ -643,12 +681,8 @@ class Inference(object):
         if pred in LABEL_SET[self.args.dataset]:
             pred = LABEL_TO_ID[self.args.dataset][pred]
         else:
-            self.args.logger.warn(
-                "The original label : '{}'.".format(raw_pred))
-            self.args.logger.warn(
-                "The predicted label: '{}' is not in label set.".format(pred))
+            self.args.logger.debug(f"The raw_pred label ({raw_pred}) -> processed_pred {pred} is not in label set: {LABEL_TO_ID[self.args.dataset]}")
             pred = -1
-
         return pred
 
     def _process_qa_pred(self, raw_pred):

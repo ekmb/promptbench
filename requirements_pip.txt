@@ -1,9 +1,6 @@
-# run inside big_nlp container
 lru-dict==1.1.8
 tensorflow_hub
 tensorflow==2.11.0
 sentencepiece
 transformers
-accelerate
-torch<2.0.0
 git+https://github.com/jubick1337/TextAttack.git#egg=textattack

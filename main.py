@@ -10,7 +10,7 @@ from dataload import create_dataset
 from inference import Inference
 from prompt_attack.attack import create_attack
 from prompt_attack.goal_function import create_goal_function
-from config import MODEL_SET
+from config import MODEL_SET, NEMO_TRT_MODELS
 from prompt_attack.utils import CLASS_REGISTRY
 
 
@@ -42,8 +42,11 @@ def _add_nemo_args(parser):
     group.add_argument('--nemo_add_BOS', action='store_true', help='add the bos token at the begining of the prompt')
     group.add_argument('--nemo_all_probs', action='store_true', help='whether return the log prob for all the tokens in vocab')
     group.add_argument('--nemo_repetition_penalty', type=float, default=1.2, help='The parameter for repetition penalty. 1.0 means no penalty.')
-    group.add_argument('--nemo_batch_size', type=int, default=32, help='batch size for inference')
     group.add_argument('--nemo_devices', type=int, default=1, help='Number of GPUs to use for inference')
+    group.add_argument('--nemo_url', type=str, default="localhost:8000", help='url for server inference')
+    group.add_argument('--nemo_init_timeout', type=float, default=600.0, help='timeout for server inference')
+    group.add_argument('--nemo_use_server', action='store_true', help='enable server inference')
+    group.add_argument('--nemo_use_prompt', action='store_true', help='use NeMo prompt for aligned models')
     return parser
 
 def get_args():
@@ -96,16 +99,16 @@ def prompt_selection(logger, inference_model, prompts, max_samples=1000):
     
     import time
 
-    start_time = time.time()
+    # start_time = time.time()
     # prompt_dict = {}
     # for prompt in prompts:
     #     acc = inference_model.predict(prompt, max_samples=max_samples)
     #     prompt_dict[prompt] = acc
     #     logger.info("{:.2f}, {}\n".format(acc*100, prompt))
-    #     # print("{:.2f}, {}\n".format(acc*100, prompt))
+    #     print("{:.2f}, {}\n".format(acc*100, prompt))
     # print("Default Time: ", time.time() - start_time)
-
-    start_time = time.time()
+# 
+    # start_time = time.time()
     if "predict_batch" in dir(inference_model):
         acc = inference_model.predict_batch(prompts, max_samples=max_samples)
         prompt_dict = {prompt: acc[idx] for idx, prompt in enumerate(prompts)}
@@ -116,7 +119,6 @@ def prompt_selection(logger, inference_model, prompts, max_samples=1000):
             acc = inference_model.predict(prompt)
             prompt_dict[prompt] = acc
             logger.info("{:.2f}, {}\n".format(acc*100, prompt))
-    
     sorted_prompts = sorted(prompt_dict.items(),
                             key=lambda x: x[1], reverse=True)
     return sorted_prompts
@@ -187,8 +189,7 @@ def attack(args, inference_model, RESULTS_DIR):
                     args.logger.info(
                         "Prompt: {}, acc: {:.2f}%\n".format(prompt, acc*100))
                     with open(RESULTS_DIR+args.save_file_name+".txt", "a+") as f:
-                        f.write("Prompt: {}, acc: {:.2f}%\n".format(
-                            prompt, acc*100))
+                        f.write("Prompt: {}, acc: {:.2f}%\n".format(prompt, acc*100))
 
                 continue
 
@@ -227,16 +228,19 @@ def main(args):
     RESULTS_DIR = os.path.join(args.output_dir, "results/" + save_dir)
 
     for DIR in [LOGS_DIR, RESULTS_DIR]:
-        if not os.path.isdir(DIR):
-            os.makedirs(DIR)
+        os.makedirs(DIR, exist_ok=True)
 
-    model_name = args.model.replace('/', '_')
+    log_model_name = args.model.replace('/', '_')
     if args.model == "nemo":
-        if args.nemo_model_path is None or not os.path.exists(args.nemo_model_path):
-            raise ValueError("Please specify a valid .nemo path")
-        model_name = os.path.basename(args.nemo_model_path).replace(".nemo", "")
+        if args.nemo_use_server:
+            if args.nemo_model_path not in NEMO_TRT_MODELS:
+                raise ValueError("Please specify a valid NeMo model for server inference!")
+        elif args.nemo_model_path is None or not os.path.exists(args.nemo_model_path):
+            raise ValueError(f"{args.nemo_model_path} not found. Please specify a valid .nemo path")
+        
+        log_model_name = f"{args.nemo_model_path}_server" if args.nemo_use_server else os.path.basename(args.nemo_model_path).replace(".nemo", "")
 
-    file_name = model_name + '_' + args.attack + "_gen_len_" + str(args.generate_len) + "_" + str(args.shot) + "_shot"
+    file_name = log_model_name + '_' + args.attack + "_gen_len_" + str(args.generate_len) + "_" + str(args.shot) + "_shot"
     
     args.save_file_name = file_name
 
@@ -250,7 +254,8 @@ def main(args):
 
     logger = create_logger(LOGS_DIR+file_name+".log")
     logger.info(args)
-
+    with open(RESULTS_DIR+args.save_file_name+".txt", "a+") as f:
+        f.write(str(args)+"\n")
     args.logger = logger
 
     attack(args, inference_model, RESULTS_DIR)
