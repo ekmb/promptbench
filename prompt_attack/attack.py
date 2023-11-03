@@ -19,6 +19,7 @@ from textattack.attack_results import (
     SkippedAttackResult,
     SuccessfulAttackResult,
 )
+from textattack.search_methods.greedy_search import GreedySearch
 from textattack.constraints import Constraint, PreTransformationConstraint
 from textattack.goal_function_results import GoalFunctionResultStatus
 from textattack.goal_functions import GoalFunction
@@ -50,6 +51,8 @@ from textattack.transformations import (
     WordSwapRandomCharacterSubstitution,
     WordSwapMaskedLM,
 )
+
+from prompt_attack.utils import CLASS_REGISTRY
 
 
 class AdvPromptAttack:
@@ -609,7 +612,67 @@ def create_attack(args, goal_function):
         from prompt_attack.search import BruteForceSearch
         transformation = StressTestTransformation()
         constraints = []
-        search_method = BruteForceSearch() 
+        search_method = BruteForceSearch()
+    elif args.attack == "nemo":
+        from textattack.transformations import (
+            CompositeTransformation,
+            WordSwapPunctuationCharacterInsertion,
+            WordSwapRandomCharacterCase,
+            WordSwapTabCharacterInsertion,
+            WordSwapWhitespaceCharacterInsertion,
+            WordInsertionRandomHyperlink
+        )
+        transformation = CompositeTransformation([ 
+        WordSwapWhitespaceCharacterInsertion(),
+        WordSwapPunctuationCharacterInsertion(),
+        WordSwapTabCharacterInsertion(),
+        WordInsertionRandomHyperlink(),
+        WordSwapRandomCharacterCase(),])
+        constraints = [RepeatModification(), StopwordModification()]
+        search_method = GreedySearch()
+    elif args.attack == "flexible_attack":
+        transformation = []
+        constraints = []
+
+        if not args.transforms:
+            raise ValueError("No transformations specified for the flexible attack. Please provide at least one transformation.")
+        if not args.constraints:
+            raise ValueError("No constraints specified for the flexible attack. Please provide at least one constraint.")
+        if not args.search_method:
+            raise ValueError("No search method specified for the flexible attack. Please provide a search method.")
+
+        if hasattr(args, 'transforms') and args.transforms:
+            transformations = []
+            TRANSFORMATION_CLASSES = CLASS_REGISTRY['transformations']
+            for t in args.transforms:
+                for trans_name in t.split(','):
+                    try:
+                        transformations.append(TRANSFORMATION_CLASSES[trans_name]())
+                    except KeyError as e:
+                        raise ValueError(f"Transformation '{trans_name}' not recognized. Available transformations: {list(TRANSFORMATION_CLASSES.keys())}") from e
+
+            if len(transformations) > 1:
+                from textattack.transformations import CompositeTransformation
+                transformation = CompositeTransformation(transformations)
+            elif transformations:
+                transformation = transformations[0]
+
+        if hasattr(args, 'constraints') and args.constraints:
+            CONSTRAINT_CLASSES = CLASS_REGISTRY['constraints']
+            for c in args.constraints:
+                for cons_name in c.split(','):
+                    try:
+                        constraints.append(CONSTRAINT_CLASSES[cons_name]())
+                    except KeyError as e:
+                        raise ValueError(f"Constraint '{cons_name}' not recognized. Available constraints: {list(CONSTRAINT_CLASSES.keys())}") from e
+
+        if hasattr(args, 'search_method') and args.search_method:
+            SEARCH_METHOD_CLASSES =  CLASS_REGISTRY['search_methods']
+            try:
+                search_method = SEARCH_METHOD_CLASSES[args.search_method]()
+            except KeyError as e:
+                raise ValueError(f"Search method '{args.search_method}' not recognized. Available search methods: {list(SEARCH_METHOD_CLASSES.keys())}") from e
+
     else:
         raise NotImplementedError
     
