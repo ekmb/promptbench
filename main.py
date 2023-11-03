@@ -11,7 +11,7 @@ from inference import Inference
 from prompt_attack.attack import create_attack
 from prompt_attack.goal_function import create_goal_function
 from config import MODEL_SET
-from utils import CLASS_REGISTRY
+from prompt_attack.utils import CLASS_REGISTRY
 
 
 def create_logger(log_path):
@@ -69,7 +69,8 @@ def get_args():
         'no', 
         'noattack',
         'clean',
-        'nemo'
+        'nemo',
+        'flexible_attack'
     ])
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument('--output_dir', type=str, default='./')

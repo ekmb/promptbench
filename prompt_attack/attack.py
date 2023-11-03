@@ -631,6 +631,9 @@ def create_attack(args, goal_function):
         constraints = [RepeatModification(), StopwordModification()]
         search_method = GreedySearch()
     elif args.attack == "flexible_attack":
+        transformation = []
+        constraints = []
+
         if not args.transforms:
             raise ValueError("No transformations specified for the flexible attack. Please provide at least one transformation.")
         if not args.constraints:
@@ -641,24 +644,27 @@ def create_attack(args, goal_function):
         if hasattr(args, 'transforms') and args.transforms:
             transformations = []
             TRANSFORMATION_CLASSES = CLASS_REGISTRY['transformations']
-            for trans_name in args.transforms:
-                try:
-                    transformations.append(TRANSFORMATION_CLASSES[trans_name]())
-                except KeyError as e:
-                    raise ValueError(f"Transformation '{trans_name}' not recognized. Available transformations: {list(TRANSFORMATION_CLASSES.keys())}") from e
+            for t in args.transforms:
+                for trans_name in t.split(','):
+                    try:
+                        transformations.append(TRANSFORMATION_CLASSES[trans_name]())
+                    except KeyError as e:
+                        raise ValueError(f"Transformation '{trans_name}' not recognized. Available transformations: {list(TRANSFORMATION_CLASSES.keys())}") from e
 
             if len(transformations) > 1:
+                from textattack.transformations import CompositeTransformation
                 transformation = CompositeTransformation(transformations)
             elif transformations:
                 transformation = transformations[0]
 
         if hasattr(args, 'constraints') and args.constraints:
             CONSTRAINT_CLASSES = CLASS_REGISTRY['constraints']
-            for cons_name in args.constraints:
-                try:
-                    constraints.append(CONSTRAINT_CLASSES[cons_name]())
-                except KeyError as e:
-                    raise ValueError(f"Constraint '{cons_name}' not recognized. Available constraints: {list(CONSTRAINT_CLASSES.keys())}") from e
+            for c in args.constraints:
+                for cons_name in c.split(','):
+                    try:
+                        constraints.append(CONSTRAINT_CLASSES[cons_name]())
+                    except KeyError as e:
+                        raise ValueError(f"Constraint '{cons_name}' not recognized. Available constraints: {list(CONSTRAINT_CLASSES.keys())}") from e
 
         if hasattr(args, 'search_method') and args.search_method:
             SEARCH_METHOD_CLASSES =  CLASS_REGISTRY['search_methods']

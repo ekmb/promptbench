@@ -1,5 +1,7 @@
 import importlib
+import inspect
 import pkgutil
+from pprint import pprint
 
 import textattack.transformations
 import textattack.constraints
@@ -45,16 +47,17 @@ def register_classes(module, class_dict, base_class):
                 attribute is not base_class and attribute.__name__ not in class_dict):
                 class_dict[attribute.__name__] = attribute
 
+
 CLASS_REGISTRY = {
     'transformations': {},
     'constraints': {},
     'search_methods': {}
 }
 
-for category, base_class in [('transformations', textattack.transformations.Transformation),
-                             ('constraints', textattack.constraints.Constraint),
-                             ('search_methods', textattack.search_methods.SearchMethod)]:
-    module = getattr(textattack, category)
-    import_submodules(module)
-    register_classes(module, CLASS_REGISTRY[category], base_class)
-
+for category, base_classes in [('transformations', [textattack.transformations.Transformation]),
+                             ('constraints', [textattack.constraints.Constraint, textattack.constraints.PreTransformationConstraint]),
+                             ('search_methods', [textattack.search_methods.SearchMethod])]:
+    for base_class in base_classes:
+        module = getattr(textattack, category)
+        import_submodules(module)
+        register_classes(module, CLASS_REGISTRY[category], base_class)
