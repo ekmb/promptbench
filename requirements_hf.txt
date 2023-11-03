@@ -1,4 +1,3 @@
-# THIS UPDATE TORCH, use only for HF models [run inside big_nlp container]
 lru-dict==1.1.8
 textattack==0.3.8
 tensorflow_hub
