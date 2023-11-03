@@ -460,6 +460,9 @@ class Inference(object):
                     preds[i] = preds[i].split("\n")[0].strip()
                 return preds
         # pad to the longest sequence in the batch and truncate all the sequences to the max model's length
+        if not self.tokenizer.pad_token:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+
         input_ids = self.tokenizer(input_text, padding="longest", truncation=True, return_tensors="pt").input_ids.to("cuda")
       
         if 't5' in model or 'ul2' in model:
@@ -483,7 +486,7 @@ class Inference(object):
 
         elif model in ["llama-13b", "llama2-13b", 'llama2-13b-chat', "vicuna-13b", "vicuna-13b-v1.3", "llama2-7b", "llama2-7b-chat"]:
             outputs = self.pipe.generate(input_ids,
-                                        temperature=0,
+                                        # temperature=1.0,
                                         max_new_tokens=self.args.generate_len,
                                         early_stopping=True)
 

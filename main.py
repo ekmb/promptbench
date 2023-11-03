@@ -11,6 +11,7 @@ from inference import Inference
 from prompt_attack.attack import create_attack
 from prompt_attack.goal_function import create_goal_function
 from config import MODEL_SET, NEMO_TRT_MODELS
+from prompt_attack.utils import CLASS_REGISTRY
 
 
 def create_logger(log_path):
@@ -71,6 +72,8 @@ def get_args():
         'no', 
         'noattack',
         'clean',
+        'nemo',
+        'flexible_attack'
     ])
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument('--output_dir', type=str, default='./')
@@ -80,6 +83,10 @@ def get_args():
     parser.add_argument('--prompt_selection', action='store_true')
     parser.add_argument('--max_samples', type=int, default=1000, help="max number of samples to use from the dataset")
     parser.add_argument('--batch_size', type=int, default=32, help='batch size for inference')
+    parser.add_argument('--transforms', nargs='*', type=str, help=f'List of transformations for the flexible attack, list of available transformations: {CLASS_REGISTRY["transformations"]}', default=[])
+    parser.add_argument('--constraints', nargs='*', type=str, help=f'List of constraints for the flexible attack, list of available constraints: {CLASS_REGISTRY["constraints"]}', default=[])
+    parser.add_argument('--search_method', type=str, help=f'Search method for the flexible attack, list of available search methods: {CLASS_REGISTRY["search_methods"]}', default='')
+
 
     parser = _add_nemo_args(parser)
     args = parser.parse_args()
