@@ -63,12 +63,11 @@ class Inference(object):
             """
 
             if self.model == 'google/flan-t5-large':
-                from transformers import T5Tokenizer, T5ForConditionalGeneration, AutoModelForSeq2SeqLM
+                from transformers import T5Tokenizer, T5ForConditionalGeneration
 
                 self.tokenizer = T5Tokenizer.from_pretrained(
                     self.model, device_map="cuda")
                 self.pipe = T5ForConditionalGeneration.from_pretrained(self.model, device_map="cuda")
-                self.pipe_batch = AutoModelForSeq2SeqLM.from_pretrained(self.model, device_map="cuda")
 
             elif self.model == 'EleutherAI/gpt-neox-20b':
                 from transformers import GPTNeoXForCausalLM, GPTNeoXTokenizerFast
@@ -462,13 +461,9 @@ class Inference(object):
                 return preds
         # pad to the longest sequence in the batch and truncate all the sequences to the max model's length
         input_ids = self.tokenizer(input_text, padding="longest", truncation=True, return_tensors="pt").input_ids.to("cuda")
-
+      
         if 't5' in model or 'ul2' in model:
-            # TODO: check: check if str?
-            if len(input_text) == 1:
-                outputs = self.pipe.generate(input_ids, max_length=self.args.generate_len, early_stopping=True)
-            else:
-                outputs = self.pipe_batch.generate(input_ids, max_length=self.args.generate_len, early_stopping=True)
+            outputs = self.pipe.generate(input_ids, max_length=self.args.generate_len, early_stopping=True)
             out = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
         elif model == 'EleutherAI/gpt-neox-20b':

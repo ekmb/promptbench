@@ -223,7 +223,7 @@ def main(args):
     for DIR in [LOGS_DIR, RESULTS_DIR]:
         os.makedirs(DIR, exist_ok=True)
 
-    model_name = args.model.replace('/', '_')
+    log_model_name = args.model.replace('/', '_')
     if args.model == "nemo":
         if args.nemo_use_server:
             if args.nemo_model_path not in NEMO_TRT_MODELS:
