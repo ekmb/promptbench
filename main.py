@@ -78,6 +78,10 @@ def get_args():
     parser.add_argument('--prompt_selection', action='store_true')
     parser.add_argument('--max_samples', type=int, default=1000, help="max number of samples to use from the dataset")
     parser.add_argument('--batch_size', type=int, default=32, help='batch size for inference')
+    parser.add_argument('--transforms', nargs='*', type=str, help='List of transformations for the flexible attack', default=[])
+    parser.add_argument('--constraints', nargs='*', type=str, help='List of constraints for the flexible attack', default=[])
+    parser.add_argument('--search_method', type=str, help='Search method for the flexible attack', default='')
+
 
     parser = _add_nemo_args(parser)
     args = parser.parse_args()

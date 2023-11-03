@@ -52,6 +52,8 @@ from textattack.transformations import (
     WordSwapMaskedLM,
 )
 
+from prompt_attack.utils import CLASS_REGISTRY
+
 
 class AdvPromptAttack:
     """An attack generates adversarial examples on text.
@@ -618,10 +620,53 @@ def create_attack(args, goal_function):
             WordSwapRandomCharacterCase,
             WordSwapTabCharacterInsertion,
             WordSwapWhitespaceCharacterInsertion,
+            WordInsertionRandomHyperlink
         )
-        transformation = CompositeTransformation([WordSwapPunctuationCharacterInsertion(), WordSwapRandomCharacterCase(), WordSwapTabCharacterInsertion(), WordSwapWhitespaceCharacterInsertion()])
+        transformation = CompositeTransformation([ 
+        WordSwapWhitespaceCharacterInsertion(),
+        WordSwapPunctuationCharacterInsertion(),
+        WordSwapTabCharacterInsertion(),
+        WordInsertionRandomHyperlink(),
+        WordSwapRandomCharacterCase(),])
         constraints = [RepeatModification(), StopwordModification()]
         search_method = GreedySearch()
+    elif args.attack == "flexible_attack":
+        if not args.transforms:
+            raise ValueError("No transformations specified for the flexible attack. Please provide at least one transformation.")
+        if not args.constraints:
+            raise ValueError("No constraints specified for the flexible attack. Please provide at least one constraint.")
+        if not args.search_method:
+            raise ValueError("No search method specified for the flexible attack. Please provide a search method.")
+
+        if hasattr(args, 'transforms') and args.transforms:
+            transformations = []
+            TRANSFORMATION_CLASSES = CLASS_REGISTRY['transformations']
+            for trans_name in args.transforms:
+                try:
+                    transformations.append(TRANSFORMATION_CLASSES[trans_name]())
+                except KeyError as e:
+                    raise ValueError(f"Transformation '{trans_name}' not recognized. Available transformations: {list(TRANSFORMATION_CLASSES.keys())}") from e
+
+            if len(transformations) > 1:
+                transformation = CompositeTransformation(transformations)
+            elif transformations:
+                transformation = transformations[0]
+
+        if hasattr(args, 'constraints') and args.constraints:
+            CONSTRAINT_CLASSES = CLASS_REGISTRY['constraints']
+            for cons_name in args.constraints:
+                try:
+                    constraints.append(CONSTRAINT_CLASSES[cons_name]())
+                except KeyError as e:
+                    raise ValueError(f"Constraint '{cons_name}' not recognized. Available constraints: {list(CONSTRAINT_CLASSES.keys())}") from e
+
+        if hasattr(args, 'search_method') and args.search_method:
+            SEARCH_METHOD_CLASSES =  CLASS_REGISTRY['search_methods']
+            try:
+                search_method = SEARCH_METHOD_CLASSES[args.search_method]()
+            except KeyError as e:
+                raise ValueError(f"Search method '{args.search_method}' not recognized. Available search methods: {list(SEARCH_METHOD_CLASSES.keys())}") from e
+
     else:
         raise NotImplementedError
     
@@ -630,4 +675,3 @@ def create_attack(args, goal_function):
     goal_function = goal_function
     attack = AdvPromptAttack(goal_function, constraints, transformation, search_method)
     return attack
-# python main.py --model meta-llama/Llama-2-13b-chat-hf --dataset glue --attack nemo --shot 0
