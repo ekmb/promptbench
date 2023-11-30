@@ -102,8 +102,6 @@ def nemo_init_model(cfg: OmegaConf):
             save_restore_connector=save_restore_connector,
         )
 
-        # with dist checkpointing we don't need to set this
-        # if not model_config.get('mcore_gpt', False):
         with open_dict(cfg):
             cfg.tensor_model_parallel_size = model_config.get('tensor_model_parallel_size', 1)
             cfg.pipeline_model_parallel_size = model_config.get('pipeline_model_parallel_size', 1)
