@@ -68,7 +68,7 @@ MODEL_SET = [
 
 NEMO_TRT_MODELS = ["GPT-8B-SFT", "GPT-8B-RLHF"]
 NEMO_PROMPT = "<extra_id_0>System\n\n<extra_id_1>User\n{prompt}\n<extra_id_1>Assistant\n"
-NEMO_STEERLM_PROMPT = """\x00System A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions. \x11User {prompt} \x11Assistant \x12quality:4,toxicity:0,humor:0,creativity:0,helpfulness:4,correctness:4,coherence:4,complexity:4,verbosity:0""" # Verbosity? @Evelina Bakhturina
+NEMO_STEERLM_PROMPT = """\x00System A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions. \x11User {prompt} \x11Assistant \x12quality:4,toxicity:0,humor:0,creativity:0,helpfulness:4,correctness:4,coherence:4,complexity:4,verbosity:0""" # Verbosity was changed to 0 from default 4
 
 LABEL_TO_ID = {
     'mmlu': {'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D'},
