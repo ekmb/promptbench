@@ -47,6 +47,7 @@ def _add_nemo_args(parser):
     group.add_argument('--nemo_init_timeout', type=float, default=600.0, help='timeout for server inference')
     group.add_argument('--nemo_use_server', action='store_true', help='enable server inference')
     group.add_argument('--nemo_use_prompt', action='store_true', help='use NeMo prompt for aligned models')
+    group.add_argument('--steerlm', action='store_true', help='use steerlm prompt for aligned models')
     return parser
 
 def get_args():

@@ -29,7 +29,7 @@ try:
 except:
     TRT_AVAILABLE = False
 
-from config import LABEL_SET, LABEL_TO_ID, NEMO_PROMPT
+from config import LABEL_SET, LABEL_TO_ID, NEMO_PROMPT, NEMO_STEERLM_PROMPT
 from tqdm import tqdm
 from typing import List
 from collections import defaultdict
@@ -623,7 +623,7 @@ class Inference(object):
         input_text += content
         # TODO fix few shot examples for NeMo prompt
         if self.args.model == "nemo":
-            input_text = NEMO_PROMPT.replace("{prompt}", input_text)
+            input_text = NEMO_PROMPT.replace("{prompt}", input_text) if not self.args.steerlm else NEMO_STEERLM_PROMPT.replace("{prompt}", input_text)
         else:
             input_text += ' Answer: '
         return input_text, label
