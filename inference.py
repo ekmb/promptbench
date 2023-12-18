@@ -672,7 +672,7 @@ class Inference(object):
 
         input_text += "Question: " + question
         if self.args.model == "nemo":
-            input_text = NEMO_PROMPT.replace("{prompt}", input_text)
+            input_text = NEMO_PROMPT.replace("{prompt}", input_text) if not self.args.steerlm else NEMO_STEERLM_PROMPT.replace("{prompt}", input_text)
         else:
             input_text += "\nAnswer: "
         return input_text, label
@@ -686,7 +686,7 @@ class Inference(object):
 
         input_text += "Question: " + question
         if self.args.model == "nemo":
-            input_text = NEMO_PROMPT.replace("{prompt}", input_text)
+            input_text = NEMO_PROMPT.replace("{prompt}", input_text) if not self.args.steerlm else NEMO_STEERLM_PROMPT.replace("{prompt}", input_text)
         else:
             input_text += "\nAnswer: "
         return input_text, label
@@ -706,7 +706,7 @@ class Inference(object):
 
         input_text += "Question: " + question
         if self.args.model == "nemo":
-            input_text = NEMO_PROMPT.replace("{prompt}", input_text)
+            input_text = NEMO_PROMPT.replace("{prompt}", input_text) if not self.args.steerlm else NEMO_STEERLM_PROMPT.replace("{prompt}", input_text)
         else:
             input_text += "\nAnswer: "
         return input_text, label
@@ -723,7 +723,7 @@ class Inference(object):
 
         input_text += content
         if self.args.model == "nemo":
-            input_text = NEMO_PROMPT.replace("{prompt}", input_text)
+            input_text = NEMO_PROMPT.replace("{prompt}", input_text) if not self.args.steerlm else NEMO_STEERLM_PROMPT.replace("{prompt}", input_text)
         else:
             input_text += "\nAnswer: "
         return input_text, target
@@ -737,7 +737,7 @@ class Inference(object):
 
         input_text += content
         if self.args.model == "nemo":
-            input_text = NEMO_PROMPT.replace("{prompt}", input_text)
+            input_text = NEMO_PROMPT.replace("{prompt}", input_text) if not self.args.steerlm else NEMO_STEERLM_PROMPT.replace("{prompt}", input_text)
         else:
             input_text += "Answer: "
         return input_text, id
@@ -755,7 +755,7 @@ class Inference(object):
 
         input_text += content
         if self.args.model == "nemo":
-            input_text = NEMO_PROMPT.replace("{prompt}", input_text)
+            input_text = NEMO_PROMPT.replace("{prompt}", input_text) if not self.args.steerlm else NEMO_STEERLM_PROMPT.replace("{prompt}", input_text)
         else:
             input_text += "\nAnswer: "
         return input_text, label

@@ -401,26 +401,19 @@ def main(args):
                     "Please specify a valid NeMo model for server inference!"
                 )
         elif args.nemo_model_path is None or not os.path.exists(args.nemo_model_path):
-            raise ValueError(
-                f"{args.nemo_model_path} not found. Please specify a valid .nemo path"
-            )
+            raise ValueError(f"{args.nemo_model_path} not found. Please specify a valid .nemo path")
+        
+        log_model_name = f"{args.nemo_model_path}_server" if args.nemo_use_server else os.path.basename(args.nemo_model_path).replace(".nemo", "")
+        if args.nemo_use_prompt:
+            log_model_name += "_prompt"
 
-        log_model_name = (
-            f"{args.nemo_model_path}_server"
-            if args.nemo_use_server
-            else os.path.basename(args.nemo_model_path).replace(".nemo", "")
-        )
+    file_name = log_model_name + '_' + args.attack + "_gen_len_" + str(args.generate_len) + "_" + str(args.shot) + "_shot"
+    
+    if args.attack == "flexible_attack":
+        for DIR in [LOGS_DIR, RESULTS_DIR]:
+            os.makedirs(f"{DIR}/{file_name}", exist_ok=True)
 
-    file_name = (
-        log_model_name
-        + "_"
-        + args.attack
-        + "_gen_len_"
-        + str(args.generate_len)
-        + "_"
-        + str(args.shot)
-        + "_shot"
-    )
+        file_name += "/" + "_".join(args.transforms)
 
     args.save_file_name = file_name
 
