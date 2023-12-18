@@ -240,6 +240,8 @@ def main(args):
             raise ValueError(f"{args.nemo_model_path} not found. Please specify a valid .nemo path")
         
         log_model_name = f"{args.nemo_model_path}_server" if args.nemo_use_server else os.path.basename(args.nemo_model_path).replace(".nemo", "")
+        if args.nemo_use_prompt:
+            log_model_name += "_prompt"
 
     file_name = log_model_name + '_' + args.attack + "_gen_len_" + str(args.generate_len) + "_" + str(args.shot) + "_shot"
     
