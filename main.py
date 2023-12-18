@@ -243,6 +243,13 @@ def main(args):
 
     file_name = log_model_name + '_' + args.attack + "_gen_len_" + str(args.generate_len) + "_" + str(args.shot) + "_shot"
     
+    if args.attack == "flexible_attack":
+        for DIR in [LOGS_DIR, RESULTS_DIR]:
+            os.makedirs(f"{DIR}/{file_name}", exist_ok=True)
+
+        file_name += "/" + "_".join(args.transforms)
+
+
     args.save_file_name = file_name
 
     if args.dataset in ["iwslt", "un_multi"]:
