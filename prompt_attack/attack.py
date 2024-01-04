@@ -543,7 +543,7 @@ def create_attack(args, goal_function):
         search_method = GreedyWordSwapWIR(wir_method="delete")
 
     elif args.attack == "textbugger":
-        
+        from textattack.transformations import CompositeTransformation
         transformation = CompositeTransformation(
             [
                 WordSwapRandomCharacterInsertion(
@@ -569,7 +569,7 @@ def create_attack(args, goal_function):
         search_method = GreedyWordSwapWIR(wir_method="delete")
     
     elif args.attack == "deepwordbug":
-
+        from textattack.transformations import CompositeTransformation
         transformation = CompositeTransformation(
             [
                 WordSwapNeighboringCharacterSwap(),
