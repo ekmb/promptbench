@@ -20,18 +20,23 @@ from functools import partial
 from typing import List
 
 import torch
-from nemo.collections.nlp.models.language_modeling.megatron_gpt_model import \
-    MegatronGPTModel
-from nemo.collections.nlp.modules.common.megatron.megatron_init import \
-    fake_initialize_model_parallel
-from nemo.collections.nlp.modules.common.text_generation_server import \
-    MegatronServer
+from nemo.collections.nlp.models.language_modeling.megatron_gpt_model import (
+    MegatronGPTModel,
+)
+from nemo.collections.nlp.modules.common.megatron.megatron_init import (
+    fake_initialize_model_parallel,
+)
+from nemo.collections.nlp.modules.common.text_generation_server import MegatronServer
 from nemo.collections.nlp.modules.common.text_generation_utils import generate
 from nemo.collections.nlp.modules.common.transformer.text_generation import (
-    LengthParam, SamplingParam)
-from nemo.collections.nlp.parts.nlp_overrides import (CustomProgressBar,
-                                                      NLPDDPStrategy,
-                                                      NLPSaveRestoreConnector)
+    LengthParam,
+    SamplingParam,
+)
+from nemo.collections.nlp.parts.nlp_overrides import (
+    CustomProgressBar,
+    NLPDDPStrategy,
+    NLPSaveRestoreConnector,
+)
 from nemo.core.config import hydra_runner
 from nemo.utils.app_state import AppState
 from nemo.utils.model_utils import inject_model_parallel_rank
@@ -45,10 +50,9 @@ try:
     HAVE_MEGATRON_CORE = True
 
 except (ImportError, ModuleNotFoundError):
-
     HAVE_MEGATRON_CORE = False
 
-__all__ = ['init_model', 'pred_by_generation']
+__all__ = ["init_model", "pred_by_generation"]
 
 """
 This is the script to run GPT text generation.
@@ -63,7 +67,9 @@ class RequestDataSet(Dataset):
         super().__init__()
         self.sentences = sentences
 
-    def __len__(self,):
+    def __len__(
+        self,
+    ):
         return len(self.sentences)
 
     def __getitem__(self, idx):
@@ -84,13 +90,13 @@ def nemo_init_model(cfg: OmegaConf):
     trainer = Trainer(
         strategy=NLPDDPStrategy(timeout=datetime.timedelta(seconds=18000)),
         **cfg.trainer,
-        callbacks=[CustomProgressBar()],
+        # callbacks=[CustomProgressBar()],
     )
 
     if (
         cfg.tensor_model_parallel_size < 0
         or cfg.pipeline_model_parallel_size < 0
-        or cfg.get('pipeline_model_parallel_split_rank', -1) < 0
+        or cfg.get("pipeline_model_parallel_split_rank", -1) < 0
     ):
         save_restore_connector = NLPSaveRestoreConnector()
         if os.path.isdir(cfg.gpt_model_file):
@@ -103,9 +109,15 @@ def nemo_init_model(cfg: OmegaConf):
         )
 
         with open_dict(cfg):
-            cfg.tensor_model_parallel_size = model_config.get('tensor_model_parallel_size', 1)
-            cfg.pipeline_model_parallel_size = model_config.get('pipeline_model_parallel_size', 1)
-            cfg.pipeline_model_parallel_split_rank = model_config.get('pipeline_model_parallel_split_rank', 0)
+            cfg.tensor_model_parallel_size = model_config.get(
+                "tensor_model_parallel_size", 1
+            )
+            cfg.pipeline_model_parallel_size = model_config.get(
+                "pipeline_model_parallel_size", 1
+            )
+            cfg.pipeline_model_parallel_split_rank = model_config.get(
+                "pipeline_model_parallel_split_rank", 0
+            )
 
     assert (
         cfg.trainer.devices * cfg.trainer.num_nodes
@@ -128,20 +140,24 @@ def nemo_init_model(cfg: OmegaConf):
         pretrained_cfg.activations_checkpoint_granularity = None
         pretrained_cfg.activations_checkpoint_method = None
         pretrained_cfg.precision = trainer.precision
-        if pretrained_cfg.get('mcore_gpt', False):
+        if pretrained_cfg.get("mcore_gpt", False):
             # with dist checkpointing we can use the model parallel config specified by the user
             pretrained_cfg.tensor_model_parallel_size = cfg.tensor_model_parallel_size
-            pretrained_cfg.pipeline_model_parallel_size = cfg.pipeline_model_parallel_size
+            pretrained_cfg.pipeline_model_parallel_size = (
+                cfg.pipeline_model_parallel_size
+            )
         if trainer.precision == "16":
             pretrained_cfg.megatron_amp_O2 = False
-        elif trainer.precision in ['bf16', 'bf16-mixed'] and cfg.get('megatron_amp_O2', False):
+        elif trainer.precision in ["bf16", "bf16-mixed"] and cfg.get(
+            "megatron_amp_O2", False
+        ):
             pretrained_cfg.megatron_amp_O2 = True
         model = MegatronGPTModel.restore_from(
             restore_path=cfg.gpt_model_file,
             trainer=trainer,
             override_config_path=pretrained_cfg,
             save_restore_connector=save_restore_connector,
-            map_location=f'cuda:{trainer.local_rank}',  # map_location is needed for converted models
+            map_location=f"cuda:{trainer.local_rank}",  # map_location is needed for converted models
         )
 
     model.freeze()
@@ -153,16 +169,15 @@ def nemo_init_model(cfg: OmegaConf):
         pass
     return model, trainer
 
-def nemo_generate(model, prompts: List[str], batch_size: int, trainer, cfg: OmegaConf) -> List[str]:
+
+def nemo_generate(
+    model, prompts: List[str], batch_size: int, trainer, cfg: OmegaConf
+) -> List[str]:
     cfg_infer = OmegaConf.to_container(cfg.inference)
-    
+
     cfg_infer["batch_size"] = batch_size
     ds = RequestDataSet(prompts)
     request_dl = DataLoader(dataset=ds, batch_size=batch_size)
     model.set_inference_config(cfg_infer)
     response = trainer.predict(model, request_dl)
     return response
-
-    
-
-
